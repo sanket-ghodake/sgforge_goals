@@ -25,7 +25,7 @@ describe('Tier 5 E2E: Individual Goal Center Server Bootstrap', () => {
       const html = await uiRes.text();
       expect(html).toContain('astryx-container');
     } finally {
-      server.stop();
+      server.stop(true);
     }
   });
 });

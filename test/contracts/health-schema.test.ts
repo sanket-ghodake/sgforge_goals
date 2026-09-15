@@ -22,7 +22,7 @@ describe('Tier 4 Contract: Individual Goal Center Health Schema [LLR-SUB-002] [H
       expect(typeof data.uptime).toBe('number');
       expect(typeof data.memoryMb).toBe('number');
     } finally {
-      server.stop();
+      server.stop(true);
     }
   });
 });

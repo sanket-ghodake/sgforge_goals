@@ -1,175 +1,334 @@
 /**
- * Individual Goal Center - Manager Review Center (Tab 3)
- * Provides review queues, inline critique tools, rework request dialogues, and final signoff seals.
+ * Individual Goal Center - Reviews & Approvals Hub (Tab 3)
+ * Provides dual-view navigation (My Submissions vs Team Reviews) and a right-sliding
+ * WhatsApp-style review timeline pane for real-time critique, rework tracking, and signoff seals.
  * @requirements [HLR-UI-201] [LLR-SUB-001] [HLR-GOALS-001] [LLR-GOALS-002]
  */
 
 import { icons } from '../../lib/icons';
-import type { AuthUser, GoalBoard } from '../../lib/types';
+import { escapeHtml, getStatusBadge } from '../../lib/ui';
+import type { AuthUser, GoalBoard, Project } from '../../lib/types';
 
-export function renderManagerView(user: AuthUser, pendingBoards: GoalBoard[], approvedBoards: GoalBoard[]): string {
+export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects: Project[]): string {
+  const myBoards = boards.filter(b => b.ownerId === user.id);
+  // Real team boards owned by direct reports / colleagues
+  const teamBoards = boards.filter(b => b.ownerId !== user.id);
+
+  // Metric counts for My Submissions
+  const mySubmittedCount = myBoards.filter(b => b.status === 'SUBMITTED').length;
+  const myReworkCount = myBoards.filter(b => b.status === 'REWORK_REQUESTED').length;
+  const myApprovedCount = myBoards.filter(b => b.status === 'APPROVED').length;
+  const myDraftCount = myBoards.filter(b => b.status === 'DRAFT').length;
+
+  // Metric counts for Team Reviews
+  const teamPendingCount = teamBoards.filter(b => b.status === 'SUBMITTED').length;
+  const teamReworkCount = teamBoards.filter(b => b.status === 'REWORK_REQUESTED').length;
+  const teamApprovedCount = teamBoards.filter(b => b.status === 'APPROVED').length;
+
   return `
     <div style="margin-bottom: 32px;">
-      <div style="margin-bottom: 24px;">
-        <h1 style="font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px;">Manager Review Center</h1>
-        <p style="color: var(--forge-text-muted); font-size: 0.875rem;">
-          Verify team milestone commitments, request item revisions with inline guidance, or seal approved flight plans.
-        </p>
-      </div>
-
-      <!-- Pending Submissions Queue -->
-      <div style="margin-bottom: 36px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
-          <h2 style="font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-            <span style="color: var(--forge-warning);">${icons.lock}</span>
-            Pending Manager Review Queue (${pendingBoards.length})
-          </h2>
+      <!-- Main Header & Dual-View Segmented Switcher -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+        <div>
+          <h1 style="font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px;">Reviews & Approvals Hub</h1>
+          <p style="color: var(--forge-text-muted); font-size: 0.875rem;">
+            Track your own board submission progress, or inspect and review team flight plans with real-time feedback timelines.
+          </p>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 14px;">
-          ${pendingBoards.length === 0 ? `
-            <div style="padding: 40px; text-align: center; background: var(--forge-bg-card); border: 1px dashed var(--forge-border); border-radius: 10px; color: var(--forge-text-muted); font-size: 0.875rem;">
-              ${icons.checkCircle} No boards currently pending your review. All submissions are processed!
+        <!-- Segmented Navigation Pill Switcher -->
+        <div class="segmented-nav">
+          <button class="segmented-nav-btn active" id="btnTabMyReviews" onclick="switchReviewsTab('my-reviews')">
+            ${icons.user} My Submissions (${myBoards.length})
+          </button>
+          <button class="segmented-nav-btn" id="btnTabTeamReviews" onclick="switchReviewsTab('team-reviews')">
+            ${icons.users} Team Reviews (${teamBoards.length})
+            ${teamPendingCount > 0 ? `<span style="background: var(--forge-warning); color: #000; font-size: 0.68rem; padding: 1px 6px; border-radius: 9999px; font-weight: 700;">${teamPendingCount}</span>` : ''}
+          </button>
+        </div>
+      </div>
+
+      <!-- VIEW 1: MY SUBMISSIONS -->
+      <div id="myReviewsContainer">
+        <!-- Luxe HUD Metric Cards for My Submissions -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 28px;">
+          <div class="luxe-hud-card">
+            <div class="luxe-metric-label">
+              <span>UNDER REVIEW (LOCKED)</span>
+              <span style="color: var(--forge-warning);">${icons.lock}</span>
             </div>
-          ` : pendingBoards.map(b => `
-            <div style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 12px; padding: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
-              <div>
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+            <div class="luxe-metric-val" style="color: var(--forge-warning);">${mySubmittedCount}</div>
+            <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Awaiting manager review</div>
+          </div>
+
+          <div class="luxe-hud-card">
+            <div class="luxe-metric-label">
+              <span>REVISIONS NEEDED</span>
+              <span style="color: var(--forge-error);">${icons.alertCircle}</span>
+            </div>
+            <div class="luxe-metric-val" style="color: ${myReworkCount > 0 ? 'var(--forge-error)' : 'var(--forge-text-main)'};">${myReworkCount}</div>
+            <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Action required by you</div>
+          </div>
+
+          <div class="luxe-hud-card">
+            <div class="luxe-metric-label">
+              <span>APPROVED & SEALED</span>
+              <span style="color: var(--forge-success);">${icons.award}</span>
+            </div>
+            <div class="luxe-metric-val" style="color: var(--forge-success);">${myApprovedCount}</div>
+            <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Immutable flight plans</div>
+          </div>
+
+          <div class="luxe-hud-card">
+            <div class="luxe-metric-label">
+              <span>ACTIVE DRAFTS</span>
+              <span style="color: var(--forge-primary);">${icons.target}</span>
+            </div>
+            <div class="luxe-metric-val">${myDraftCount}</div>
+            <div style="font-size: 0.75rem; color: var(--forge-text-muted);">In-progress goal boards</div>
+          </div>
+        </div>
+
+        <!-- My Boards List -->
+        <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+          <h2 style="font-size: 1.15rem; font-weight: 700;">My Goal Boards & Review Statuses</h2>
+          <span style="font-size: 0.8rem; color: var(--forge-text-muted);">${myBoards.length} total boards</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px;">
+          ${myBoards.length === 0 ? `
+            <div style="grid-column: 1 / -1; padding: 48px; text-align: center; background: var(--forge-bg-card); border: 1px dashed var(--forge-border); border-radius: 16px;">
+              <div style="color: var(--forge-primary); margin-bottom: 12px;">${icons.target}</div>
+              <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;">No Goal Boards Submitted Yet</h3>
+              <p style="color: var(--forge-text-muted); font-size: 0.85rem; margin-bottom: 16px;">Create and submit your first project goal board to begin the review process.</p>
+              <button class="btn-action btn-primary" onclick="openNewBoardModal()">${icons.plus} Create Goal Board</button>
+            </div>
+          ` : myBoards.map(b => {
+            const statusBadge = getStatusBadge(b.status);
+            return `
+              <div style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; backdrop-filter: blur(12px); transition: border-color 0.2s ease, transform 0.2s ease;" onmouseover="this.style.borderColor='var(--forge-border-medium)'" onmouseout="this.style.borderColor='var(--forge-border)'">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                   <span style="font-size: 0.75rem; font-weight: 600; color: var(--forge-primary);">${b.projectName || 'Project'}</span>
-                  <span style="font-size: 0.75rem; background: var(--forge-warning-bg); color: var(--forge-warning); padding: 2px 8px; border-radius: 9999px; font-weight: 600;">
-                    ${icons.lock} Locked for Review
+                  <span style="font-size: 0.75rem; font-weight: 600; padding: 3px 10px; border-radius: 9999px; ${statusBadge.style}">
+                    ${statusBadge.label}
                   </span>
-                  <span style="font-size: 0.75rem; color: var(--forge-text-muted);">${b.cycle} &bull; Rev ${b.revisionNumber}</span>
                 </div>
-                <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;">
+
+                <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; line-height: 1.3;">
                   <a href="?tab=board&id=${b.id}" onclick="navigateSpa('board', '${b.id}', event)" style="color: var(--forge-text-main); text-decoration: none;">${b.title}</a>
                 </h3>
-                <div style="font-size: 0.825rem; color: var(--forge-text-muted);">
-                  Submitted by <strong style="color: var(--forge-text-main);">${b.ownerName}</strong> (${b.ownerDepartment}) &bull; ${b.submittedAt ? new Date(b.submittedAt).toLocaleDateString() : 'Recent'}
+
+                <div style="font-size: 0.8rem; color: var(--forge-text-muted); margin-bottom: 18px; display: flex; gap: 14px;">
+                  <span>${icons.calendar} ${b.cycle}</span>
+                  <span>${icons.layers} Rev ${b.revisionNumber}</span>
+                  <span>${icons.clock} ${new Date(b.updatedAt).toLocaleDateString()}</span>
+                </div>
+
+                <div style="margin-top: auto; padding-top: 14px; border-top: 1px solid var(--forge-border); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+                  <button class="btn-action btn-outline" style="font-size: 0.775rem;" onclick="openReviewDrawer('${b.id}')">
+                    ${icons.messageSquare} Review Timeline
+                  </button>
+                  <a href="?tab=board&id=${b.id}" onclick="navigateSpa('board', '${b.id}', event)" class="btn-action btn-primary" style="font-size: 0.775rem;">
+                    Canvas ${icons.arrowRight}
+                  </a>
                 </div>
               </div>
-
-              <div style="display: flex; gap: 10px; align-items: center;">
-                <a href="?tab=board&id=${b.id}" onclick="navigateSpa('board', '${b.id}', event)" class="btn-action btn-outline">
-                  ${icons.layers} Inspect Canvas
-                </a>
-                <button class="btn-action btn-outline" style="color: var(--forge-warning); border-color: rgba(251, 191, 36, 0.3);" onclick="openReworkModal('${b.id}', '${b.title}')">
-                  ${icons.alertCircle} Request Rework
-                </button>
-                <button class="btn-action btn-primary" onclick="handleApproveBoard('${b.id}')">
-                  ${icons.award} Approve & Seal
-                </button>
-              </div>
-            </div>
-          `).join('')}
+            `;
+          }).join('')}
         </div>
       </div>
 
-      <!-- Approved Historical Boards -->
-      <div>
-        <h2 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
-          <span style="color: var(--forge-success);">${icons.award}</span>
-          Recently Approved Flight Plans (${approvedBoards.length})
-        </h2>
-
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px;">
-          ${approvedBoards.map(b => `
-            <div style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 10px; padding: 16px;">
-              <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--forge-text-muted); margin-bottom: 8px;">
-                <span>${b.projectName || 'Project'}</span>
-                <span style="color: var(--forge-success); font-weight: 600;">Approved</span>
-              </div>
-              <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 6px;">
-                <a href="?tab=board&id=${b.id}" style="color: var(--forge-text-main); text-decoration: none;">${b.title}</a>
-              </h4>
-              <div style="font-size: 0.8rem; color: var(--forge-text-muted); margin-bottom: 12px;">
-                ${b.ownerName} &bull; ${b.cycle}
-              </div>
-              <div style="font-size: 0.75rem; color: var(--forge-text-subtle);">
-                Sealed by: ${b.approvedBy || 'Manager'}
-              </div>
+      <!-- VIEW 2: TEAM REVIEWS -->
+      <div id="teamReviewsContainer" style="display: none;">
+        <!-- Luxe HUD Metric Cards for Team Reviews -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 28px;">
+          <div class="luxe-hud-card">
+            <div class="luxe-metric-label">
+              <span>PENDING MY REVIEW</span>
+              <span style="color: var(--forge-warning);">${icons.lock}</span>
             </div>
-          `).join('')}
+            <div class="luxe-metric-val" style="color: var(--forge-warning);">${teamPendingCount}</div>
+            <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Action required by manager</div>
+          </div>
+
+          <div class="luxe-hud-card">
+            <div class="luxe-metric-label">
+              <span>REVISIONS IN PROGRESS</span>
+              <span style="color: var(--forge-accent);">${icons.alertCircle}</span>
+            </div>
+            <div class="luxe-metric-val">${teamReworkCount}</div>
+            <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Unlocked for contributor edits</div>
+          </div>
+
+          <div class="luxe-hud-card">
+            <div class="luxe-metric-label">
+              <span>SEALED & APPROVED</span>
+              <span style="color: var(--forge-success);">${icons.award}</span>
+            </div>
+            <div class="luxe-metric-val" style="color: var(--forge-success);">${teamApprovedCount}</div>
+            <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Formally approved flight plans</div>
+          </div>
+
+          <div class="luxe-hud-card">
+            <div class="luxe-metric-label">
+              <span>TEAM BOARDS</span>
+              <span style="color: var(--forge-primary);">${icons.users}</span>
+            </div>
+            <div class="luxe-metric-val">${teamBoards.length}</div>
+            <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Total direct report boards</div>
+          </div>
+        </div>
+
+        <!-- Filter Pill Bar for Team Reviews -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
+          <h2 style="font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+            ${icons.shieldCheck} Direct Reports & Team Goal Boards
+          </h2>
+
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn-action btn-outline active-filter" id="filterBtnAll" onclick="filterTeamCards('ALL')">All (${teamBoards.length})</button>
+            <button class="btn-action btn-outline" id="filterBtnPending" onclick="filterTeamCards('SUBMITTED')">Needs Review (${teamPendingCount})</button>
+            <button class="btn-action btn-outline" id="filterBtnRework" onclick="filterTeamCards('REWORK_REQUESTED')">In Revision (${teamReworkCount})</button>
+            <button class="btn-action btn-outline" id="filterBtnApproved" onclick="filterTeamCards('APPROVED')">Approved (${teamApprovedCount})</button>
+          </div>
+        </div>
+
+        <!-- Team Boards Grid -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px;" id="teamCardsGrid">
+          ${teamBoards.length === 0 ? `
+            <div style="grid-column: 1 / -1; padding: 48px 24px; text-align: center; background: var(--forge-bg-card); border: 1px dashed var(--forge-border); border-radius: 16px; margin-top: 8px;">
+              <div style="width: 52px; height: 52px; border-radius: 50%; background: rgba(59, 130, 246, 0.1); color: var(--forge-primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+                ${icons.users}
+              </div>
+              <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 8px;">No Direct Reports / Downward Team Found</h3>
+              <p style="color: var(--forge-text-muted); font-size: 0.875rem; max-width: 480px; margin: 0 auto 20px auto; line-height: 1.5;">
+                You currently have zero direct report team members assigned under your manager hierarchy. Goal boards submitted by engineers reporting to you will automatically appear here for review and signoff.
+              </p>
+              <button class="btn-action btn-outline" onclick="switchReviewsTab('my-reviews')">
+                ${icons.user} Switch to My Submissions
+              </button>
+            </div>
+          ` : teamBoards.map(b => {
+            const statusBadge = getStatusBadge(b.status);
+            return `
+              <div class="team-board-card" data-status="${b.status}" style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; backdrop-filter: blur(12px); transition: border-color 0.2s ease, transform 0.2s ease;" onmouseover="this.style.borderColor='var(--forge-border-medium)'" onmouseout="this.style.borderColor='var(--forge-border)'">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                  <div>
+                    <span style="font-size: 0.75rem; font-weight: 700; color: var(--forge-primary); display: block;">${b.ownerName}</span>
+                    <span style="font-size: 0.7rem; color: var(--forge-text-muted);">${b.ownerDepartment}</span>
+                  </div>
+                  <span style="font-size: 0.75rem; font-weight: 600; padding: 3px 10px; border-radius: 9999px; ${statusBadge.style}">
+                    ${statusBadge.label}
+                  </span>
+                </div>
+
+                <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; line-height: 1.3;">
+                  <a href="?tab=board&id=${b.id}" onclick="navigateSpa('board', '${b.id}', event)" style="color: var(--forge-text-main); text-decoration: none;">${b.title}</a>
+                </h3>
+
+                <div style="font-size: 0.8rem; color: var(--forge-text-muted); margin-bottom: 16px; display: flex; gap: 12px;">
+                  <span>${icons.folder} ${b.projectName || 'Project'}</span>
+                  <span>${icons.calendar} ${b.cycle}</span>
+                  <span>Rev ${b.revisionNumber}</span>
+                </div>
+
+                <div style="margin-top: auto; padding-top: 14px; border-top: 1px solid var(--forge-border); display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <button class="btn-action btn-primary" style="font-size: 0.775rem; flex: 1;" onclick="openReviewDrawer('${b.id}')">
+                    ${icons.messageSquare} Review Timeline
+                  </button>
+                  ${b.status === 'SUBMITTED' || b.status === 'UNLOCK_REQUESTED' || b.status === 'LOCKED_OVERDUE' || b.status === 'REWORK_REQUESTED' ? `
+                    <button class="btn-action btn-outline" style="font-size: 0.75rem; color: var(--forge-warning); border-color: rgba(245, 158, 11, 0.3);" onclick="openReworkModal('${b.id}', '${b.title.replace(/'/g, "\\'")}')">
+                      ${icons.alertCircle} Rework
+                    </button>
+                    <button class="btn-action btn-outline" style="font-size: 0.75rem; color: var(--forge-success); border-color: rgba(16, 185, 129, 0.3);" onclick="handleApproveBoard('${b.id}')">
+                      ${icons.award} Approve
+                    </button>
+                  ` : b.status === 'APPROVED' ? `
+                    <button class="btn-action btn-outline" style="font-size: 0.75rem; color: var(--forge-warning); border-color: rgba(245, 158, 11, 0.3);" onclick="openReworkModal('${b.id}', '${b.title.replace(/'/g, "\\'")}')">
+                      ${icons.alertCircle} Move to Rework
+                    </button>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
         </div>
       </div>
-    </div>
 
-    <!-- Request Rework Modal Dialog -->
-    <div class="modal-backdrop" id="reworkModal">
-      <div class="modal-box">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-          <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--forge-warning);">Request Board Revision</h3>
-          <button class="btn-icon" onclick="closeReworkModal()">${icons.close}</button>
+      <!-- SECTION 2: My Submissions Pane (Hidden by Default) -->
+      <div id="mySubmissionsContainer" style="display: none;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px;">
+          ${myBoards.map(b => {
+            const statusBadge = getStatusBadge(b.status);
+            const safeTitle = escapeHtml(b.title);
+            return `
+              <div style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 16px; padding: 22px; display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <span style="font-size: 0.75rem; font-weight: 600; padding: 3px 10px; border-radius: 9999px; ${statusBadge.style}">
+                    ${statusBadge.label}
+                  </span>
+                  <span style="font-size: 0.75rem; color: var(--forge-text-muted);">Rev ${b.revisionNumber}</span>
+                </div>
+
+                <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 6px;">
+                  <a href="?tab=board&id=${b.id}" onclick="navigateSpa('board', '${b.id}', event)" style="color: var(--forge-text-main); text-decoration: none;">${safeTitle}</a>
+                </h3>
+
+                <div style="font-size: 0.8rem; color: var(--forge-text-muted); margin-bottom: 16px; display: flex; gap: 12px;">
+                  <span>${icons.folder} ${escapeHtml(b.projectName || 'Project')}</span>
+                  <span>${icons.calendar} ${escapeHtml(b.cycle)}</span>
+                </div>
+
+                <div style="margin-top: auto; padding-top: 14px; border-top: 1px solid var(--forge-border); display: flex; gap: 8px;">
+                  <button class="btn-action btn-outline" style="font-size: 0.775rem; flex: 1;" onclick="openReviewDrawer('${b.id}')">
+                    ${icons.messageSquare} Feedback History
+                  </button>
+                  <a href="?tab=board&id=${b.id}" onclick="navigateSpa('board', '${b.id}', event)" class="btn-action btn-primary" style="font-size: 0.775rem;">
+                    Open Board
+                  </a>
+                </div>
+              </div>
+            `;
+          }).join('')}
         </div>
-
-        <p style="font-size: 0.85rem; color: var(--forge-text-muted); margin-bottom: 14px;">
-          Providing actionable feedback unlocks the board for the employee as a new revision and sends an urgent notification.
-        </p>
-
-        <form id="reworkForm" onsubmit="submitReworkRequest(event)">
-          <input type="hidden" id="reworkBoardId" />
-          <div style="margin-bottom: 16px;">
-            <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--forge-text-muted);">Revision Feedback & Guidance</label>
-            <textarea id="reworkCommentText" required rows="4" placeholder="e.g. Please clarify milestone #2 metrics and specify testing tools before final approval." style="width: 100%; border-radius: 6px; background: var(--forge-bg-card); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 10px; font-size: 0.875rem;"></textarea>
-          </div>
-
-          <div style="display: flex; justify-content: flex-end; gap: 10px;">
-            <button type="button" class="btn-action btn-outline" onclick="closeReworkModal()">Cancel</button>
-            <button type="submit" class="btn-action btn-primary" style="background: var(--forge-warning); color: var(--forge-text-main);">
-              ${icons.send} Send Rework Request
-            </button>
-          </div>
-        </form>
       </div>
     </div>
 
     <script>
-      window.openReworkModal = function(boardId) {
-        document.getElementById('reworkBoardId').value = boardId;
-        document.getElementById('reworkModal').classList.add('open');
+      // 1. Dual-View Tab Switcher
+      window.switchReviewsTab = function(tab) {
+        const myC = document.getElementById('myReviewsContainer');
+        const teamC = document.getElementById('teamReviewsContainer');
+        const btnMy = document.getElementById('btnTabMyReviews');
+        const btnTeam = document.getElementById('btnTabTeamReviews');
+
+        if (tab === 'team-reviews') {
+          if (myC) myC.style.display = 'none';
+          if (teamC) teamC.style.display = 'block';
+          if (btnMy) btnMy.classList.remove('active');
+          if (btnTeam) btnTeam.classList.add('active');
+        } else {
+          if (myC) myC.style.display = 'block';
+          if (teamC) teamC.style.display = 'none';
+          if (btnMy) btnMy.classList.add('active');
+          if (btnTeam) btnTeam.classList.remove('active');
+        }
       };
 
-      window.closeReworkModal = function() {
-        document.getElementById('reworkModal').classList.remove('open');
-      };
-
-      window.submitReworkRequest = function(e) {
-        e.preventDefault();
-        const boardId = document.getElementById('reworkBoardId').value;
-        const comment = document.getElementById('reworkCommentText').value;
-
-        fetch('api/boards/' + boardId + '/review', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ decision: 'REJECT', comment })
-        })
-        .then(res => {
-          if (!res.ok) return res.json().then(e => { throw new Error(e.detail || 'Rework request failed'); });
-          return res.json();
-        })
-        .then(() => {
-          window.closeReworkModal();
-          if (window.astryxToast) window.astryxToast('Rework request submitted. Board unlocked for employee revision.', 'info');
-          setTimeout(() => { loadSpaView('reviews'); }, 800);
-        })
-        .catch(err => { if (window.astryxToast) window.astryxToast(err.message, 'error'); });
-      };
-
-      window.handleApproveBoard = function(boardId) {
-        fetch('api/boards/' + boardId + '/review', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ decision: 'APPROVE', comment: 'Approved with formal manager signoff.' })
-        })
-        .then(res => {
-          if (!res.ok) return res.json().then(e => { throw new Error(e.detail || 'Approval failed'); });
-          return res.json();
-        })
-        .then(() => {
-          if (window.astryxToast) window.astryxToast('Board has been approved and permanently sealed.', 'success');
-          setTimeout(() => { loadSpaView('reviews'); }, 800);
-        })
-        .catch(err => { if (window.astryxToast) window.astryxToast(err.message, 'error'); });
+      // 2. Team Cards Filter
+      window.filterTeamCards = function(status, btnElement) {
+        if (btnElement) {
+          document.querySelectorAll('#teamFilterGroup .btn-outline').forEach(b => b.classList.remove('active-filter'));
+          btnElement.classList.add('active-filter');
+        }
+        const cards = document.querySelectorAll('.team-board-card');
+        cards.forEach(card => {
+          if (status === 'ALL' || card.dataset.status === status) {
+            card.style.display = 'flex';
+          } else {
+            card.style.display = 'none';
+          }
+        });
       };
     </script>
   `;

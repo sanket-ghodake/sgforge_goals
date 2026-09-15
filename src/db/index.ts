@@ -10,7 +10,26 @@ const logger = createLogger('goals-db');
 
 export const goalsDb = getDatabaseClient('goals.db');
 
+// Set SQLite performance & concurrency pragmas
+goalsDb.run('PRAGMA journal_mode = WAL;');
+goalsDb.run('PRAGMA busy_timeout = 5000;');
+goalsDb.run('PRAGMA foreign_keys = ON;');
+
 // Initialize isolated tables
+goalsDb.run(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    roles TEXT NOT NULL,
+    department TEXT NOT NULL,
+    manager_id TEXT,
+    manager_name TEXT,
+    manager_email TEXT,
+    created_at INTEGER NOT NULL
+  );
+`);
+
 goalsDb.run(`
   CREATE TABLE IF NOT EXISTS goals_items (
     id TEXT PRIMARY KEY,
@@ -45,14 +64,19 @@ goalsDb.run(`
     status TEXT NOT NULL DEFAULT 'DRAFT',
     lock_version INTEGER NOT NULL DEFAULT 1,
     revision_number INTEGER NOT NULL DEFAULT 1,
+    submission_deadline TEXT,
     submitted_at INTEGER,
     approved_at INTEGER,
     approved_by TEXT,
+    unlocked_at INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     FOREIGN KEY (project_id) REFERENCES projects(id)
   );
 `);
+
+try { goalsDb.run('ALTER TABLE goal_boards ADD COLUMN submission_deadline TEXT'); } catch (_) {}
+try { goalsDb.run('ALTER TABLE goal_boards ADD COLUMN unlocked_at INTEGER'); } catch (_) {}
 
 goalsDb.run(`
   CREATE TABLE IF NOT EXISTS goal_items (
@@ -104,19 +128,34 @@ goalsDb.run(`
 
 // Seed initial realistic data if empty
 export function seedDefaultData(defaultOrgId = 'org_default'): void {
-  const projectCount = goalsDb.query<{ count: number }, []>('SELECT count(*) as count FROM projects').get();
-  if (projectCount && projectCount.count > 0) return;
-
+  const userCount = goalsDb.query<{ count: number }, []>('SELECT count(*) as count FROM users').get();
   const now = Date.now();
 
-  // 1. Projects
-  goalsDb.run(
-    `INSERT INTO projects (id, org_id, name, code, description, manager_id, created_at) VALUES 
-     ('proj_titan', ?, 'Project Titan', 'TITAN', 'Core API Gateway & Zero-Trust Reverse Proxy Infrastructure', 'usr_manager', ?),
-     ('proj_apollo', ?, 'Project Apollo', 'APOLLO', 'High-Performance Observability & Telemetry Processing Engine', 'usr_manager', ?),
-     ('proj_hermes', ?, 'Project Hermes', 'HERMES', 'Next-Generation Multi-Tenant Edge Storage & Distributed Cache', 'usr_manager', ?)`,
-    [defaultOrgId, now, defaultOrgId, now, defaultOrgId, now]
-  );
+  if (!userCount || userCount.count === 0) {
+    goalsDb.run(
+      `INSERT INTO users (id, email, display_name, roles, department, manager_id, manager_name, manager_email, created_at) VALUES
+       ('usr_employee', 'jane.doe@forge.internal', 'Jane Doe', 'roles/employee', 'Platform Engineering', 'usr_manager', 'Sarah Connor', 'sarah.connor@forge.internal', ?),
+       ('usr_alex', 'alex.rivera@forge.internal', 'Alex Rivera', 'roles/employee', 'Core Systems', 'usr_manager', 'Sarah Connor', 'sarah.connor@forge.internal', ?),
+       ('usr_devon', 'devon.vance@forge.internal', 'Devon Vance', 'roles/employee', 'Security & SRE', 'usr_manager', 'Sarah Connor', 'sarah.connor@forge.internal', ?),
+       ('usr_manager', 'sarah.connor@forge.internal', 'Sarah Connor', 'roles/manager,roles/employee', 'Platform Engineering', null, null, null, ?),
+       ('usr_solo', 'morgan.lee@forge.internal', 'Morgan Lee', 'roles/employee', 'Independent Operations', null, null, null, ?)`,
+      [now, now, now, now, now]
+    );
+  }
+
+  const projectCount = goalsDb.query<{ count: number }, []>('SELECT count(*) as count FROM projects').get();
+  if (!projectCount || projectCount.count === 0) {
+    goalsDb.run(
+      `INSERT INTO projects (id, org_id, name, code, description, manager_id, created_at) VALUES
+       ('proj_titan', ?, 'Project Titan', 'TITAN', 'Core API Gateway & Zero-Trust Reverse Proxy Infrastructure', 'usr_manager', ?),
+       ('proj_apollo', ?, 'Project Apollo', 'APOLLO', 'High-Performance Observability & Telemetry Processing Engine', 'usr_manager', ?),
+       ('proj_hermes', ?, 'Project Hermes', 'HERMES', 'Next-Generation Multi-Tenant Edge Storage & Distributed Cache', 'usr_manager', ?)`,
+      [defaultOrgId, now, defaultOrgId, now, defaultOrgId, now]
+    );
+  }
+
+  const boardCount = goalsDb.query<{ count: number }, []>('SELECT count(*) as count FROM goal_boards').get();
+  if (boardCount && boardCount.count > 0) return;
 
   // 2. Sample Goal Boards in various states
   // Board 1: DRAFT (Jane Doe, Titan, 2026-Q1) - Editable
@@ -183,6 +222,19 @@ export function seedDefaultData(defaultOrgId = 'org_default'): void {
     [now, now, now, now]
   );
 
+  // Board 5: SUBMITTED (Morgan Lee, Titan, 2026-Q1) - Employee with NO Manager Assigned
+  goalsDb.run(
+    `INSERT INTO goal_boards (id, org_id, project_id, owner_id, owner_name, owner_email, owner_department, title, cycle, status, lock_version, revision_number, submitted_at, created_at, updated_at) VALUES
+     ('board_solo_q1', ?, 'proj_titan', 'usr_solo', 'Morgan Lee', 'morgan.lee@forge.internal', 'Independent Operations', 'Q1 Autonomous Edge Monitoring Node', '2026-Q1', 'SUBMITTED', 1, 1, ?, ?, ?)`,
+    [defaultOrgId, now - 86400000 * 2, now - 86400000 * 3, now - 86400000 * 2]
+  );
+
+  goalsDb.run(
+    `INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, created_at, updated_at) VALUES
+     ('item_5_1', 'board_solo_q1', 'Deploy Autonomous Edge Monitoring Agent', 'Self-contained monitoring harness with direct admin fallback.', 'DELIVERABLE', '2026-02-25', 100, 40, 'IN_PROGRESS', 1, ?, ?)`,
+    [now, now]
+  );
+
   // 3. In-App Reminders
   goalsDb.run(
     `INSERT INTO reminders (id, org_id, user_id, board_id, type, message, due_date, is_dismissed, created_at) VALUES
@@ -193,6 +245,43 @@ export function seedDefaultData(defaultOrgId = 'org_default'): void {
   );
 
   logger.info('Database initialized with realistic projects, goal boards, and reminders');
+}
+
+/**
+  * getUserById
+  * @requirements [LLR-SUB-001]
+  */
+export function getUserById(userId: string): { id: string; email: string; displayName: string; roles: string[]; department: string; managerId: string | null; managerName: string | null; managerEmail: string | null } | null {
+  const row = goalsDb.query<any, [string]>('SELECT * FROM users WHERE id = ?').get(userId);
+  if (!row) return null;
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    roles: (row.roles || '').split(',').map((r: string) => r.trim()),
+    department: row.department,
+    managerId: row.manager_id || null,
+    managerName: row.manager_name || null,
+    managerEmail: row.manager_email || null,
+  };
+}
+
+/**
+  * listUsers
+  * @requirements [LLR-SUB-001]
+  */
+export function listUsers() {
+  const rows = goalsDb.query<any, []>('SELECT * FROM users ORDER BY display_name ASC').all();
+  return rows.map(r => ({
+    id: r.id,
+    email: r.email,
+    displayName: r.display_name,
+    roles: (r.roles || '').split(',').map((s: string) => s.trim()),
+    department: r.department,
+    managerId: r.manager_id || null,
+    managerName: r.manager_name || null,
+    managerEmail: r.manager_email || null,
+  }));
 }
 
 // Auto-seed on startup

@@ -15,12 +15,13 @@ import type { AuthUser } from './lib/types';
 import { renderLayout } from './frontend/views/layout';
 import { renderDashboardView } from './frontend/views/dashboard-view';
 import { renderBoardsView } from './frontend/views/boards-view';
-import { renderCockpitView } from './frontend/views/cockpit-view';
 import { renderBoardView } from './frontend/views/board-view';
 import { renderManagerView } from './frontend/views/manager-view';
 import { renderExploreView } from './frontend/views/explore-view';
-import { createBoard, getBoardById, listBoards, listProjects, submitBoard, updateGoalItems } from './backend/services/board-service';
-import { approveBoard, listPendingReviews, requestRework } from './backend/services/review-service';
+import { renderLoginView } from './frontend/views/login-view';
+import { getUserById, listUsers } from './db';
+import { createBoard, getBoardById, listBoards, listProjects, submitBoard, updateGoalItems, updateItemProgress } from './backend/services/board-service';
+import { approveBoard, addReviewComment, requestRework, requestBoardUnlock, unlockBoard, setSubmissionDeadline } from './backend/services/review-service';
 import { dismissReminder, listUserReminders } from './backend/services/reminder-service';
 
 const LOG_DIR = join(import.meta.dir, '..', 'logs');
@@ -30,16 +31,28 @@ const PORT = Number(process.env.PORT || 8090);
 
 function getEffectiveUser(baseUser: AuthUser, req: Request): AuthUser {
   const cookieHeader = req.headers.get('cookie') || '';
-  const isManagerMode = cookieHeader.includes('goals_persona=manager');
+  
+  let targetUserId = baseUser.id || 'usr_employee';
+  if (cookieHeader.includes('goals_persona=manager')) {
+    targetUserId = 'usr_manager';
+  } else if (cookieHeader.includes('goals_persona=solo')) {
+    targetUserId = 'usr_solo';
+  } else if (cookieHeader.includes('goals_persona=employee')) {
+    targetUserId = 'usr_employee';
+  }
 
-  if (isManagerMode) {
+  const dbUser = getUserById(targetUserId);
+  if (dbUser) {
     return {
-      id: 'usr_manager',
-      email: 'sarah.connor@forge.internal',
-      displayName: 'Sarah Connor',
-      roles: ['roles/manager', 'roles/employee'],
-      department: 'Platform Engineering',
+      id: dbUser.id,
+      email: dbUser.email,
+      displayName: dbUser.displayName,
+      roles: dbUser.roles.length > 0 ? dbUser.roles : ['roles/employee'],
+      department: dbUser.department,
       orgId: baseUser.orgId || 'org_default',
+      managerId: dbUser.managerId,
+      managerName: dbUser.managerName,
+      managerEmail: dbUser.managerEmail,
     };
   }
 
@@ -50,7 +63,38 @@ function getEffectiveUser(baseUser: AuthUser, req: Request): AuthUser {
     roles: baseUser.roles && baseUser.roles.length > 0 ? baseUser.roles : ['roles/employee'],
     department: baseUser.department || 'Platform Engineering',
     orgId: baseUser.orgId || 'org_default',
+    managerId: baseUser.managerId ?? 'usr_manager',
+    managerName: baseUser.managerName ?? 'Sarah Connor',
+    managerEmail: baseUser.managerEmail ?? 'sarah.connor@forge.internal',
   };
+}
+
+function resolveViewContent(tabParam: string, boardIdParam: string | null, user: AuthUser, orgId: string) {
+  const allBoards = listBoards(orgId);
+  const allProjects = listProjects(orgId);
+
+  let contentHtml = '';
+  let activeTab: string = tabParam;
+
+  if (tabParam === 'board' && boardIdParam) {
+    const board = getBoardById(boardIdParam, orgId);
+    contentHtml = renderBoardView(user, board);
+    activeTab = 'board';
+  } else if (tabParam === 'boards') {
+    contentHtml = renderBoardsView(user, allBoards, allProjects);
+    activeTab = 'boards';
+  } else if (tabParam === 'reviews') {
+    contentHtml = renderManagerView(user, allBoards, allProjects);
+    activeTab = 'reviews';
+  } else if (tabParam === 'explore') {
+    contentHtml = renderExploreView(user, allBoards);
+    activeTab = 'explore';
+  } else {
+    contentHtml = renderDashboardView(user, allBoards, allProjects);
+    activeTab = 'dashboard';
+  }
+
+  return { contentHtml, activeTab, allBoards, allProjects };
 }
 
 export function startgoalsServer(portOverride?: number) {
@@ -94,24 +138,80 @@ export function startgoalsServer(portOverride?: number) {
         });
       }
 
-      // 4. Zero-Trust Auth Guard
+      // 4. Public Auth & Persona Endpoints
+      if (pathname.endsWith('/api/auth/logout') && req.method === 'POST') {
+        const authBase = process.env.AUTH_SERVICE_URL?.trim().replace(/\/+$/, '') || '';
+        const redirectUrl = authBase ? `${authBase}/login` : '/auth/login';
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
+        headers.append('Set-Cookie', 'goals_logged_out=true; Path=/; HttpOnly; SameSite=Lax');
+        headers.append('Set-Cookie', 'goals_persona=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax');
+        headers.append('Set-Cookie', 'forge_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax');
+        return new Response(JSON.stringify({ success: true, message: 'Logged out successfully', redirectUrl }), { status: 200, headers });
+      }
+
+      if (pathname.endsWith('/api/auth/login') && req.method === 'POST') {
+        const body = await req.json().catch(() => ({}));
+        const persona = body.persona || 'employee';
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
+        headers.append('Set-Cookie', `goals_persona=${persona}; Path=/; HttpOnly; SameSite=Lax`);
+        headers.append('Set-Cookie', 'goals_logged_out=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax');
+        return new Response(JSON.stringify({ success: true, persona }), { status: 200, headers });
+      }
+
+      if (pathname.endsWith('/api/auth/users') && req.method === 'GET') {
+        const users = listUsers();
+        return new Response(JSON.stringify(users), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 5. Zero-Trust Auth Guard
       const auth = await authGuard(req, {
         appName: 'goals',
         requiredRoles: ['roles/employee', 'roles/admin', 'roles/manager'],
       });
 
       if (!auth.authenticated || !auth.user) {
-        return auth.response || new Response('Unauthorized', { status: 401 });
+        if (pathname.includes('/api/')) {
+          return new Response(JSON.stringify({ error: 'Unauthorized', authenticated: false }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (auth.response) {
+          return auth.response;
+        }
+        return new Response(renderLoginView(), {
+          status: 200,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        });
       }
 
       const user = getEffectiveUser(auth.user, req);
       const orgId = user.orgId || 'org_default';
 
-      // 5. Persona Switcher Toggle (for demo testing)
       if (pathname.endsWith('/api/persona/toggle') && req.method === 'POST') {
+        if (process.env.NODE_ENV === 'production' && !user.roles.includes('roles/admin') && !user.roles.includes('roles/manager')) {
+          return new Response(JSON.stringify({ error: 'Forbidden: Persona toggling restricted' }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
         const cookieHeader = req.headers.get('cookie') || '';
-        const isManager = cookieHeader.includes('goals_persona=manager');
-        const nextVal = isManager ? 'employee' : 'manager';
+        let nextVal = 'employee';
+        if (cookieHeader.includes('goals_persona=employee')) {
+          nextVal = 'solo';
+        } else if (cookieHeader.includes('goals_persona=solo')) {
+          nextVal = 'manager';
+        } else if (cookieHeader.includes('goals_persona=manager')) {
+          nextVal = 'employee';
+        } else {
+          nextVal = 'solo';
+        }
+
         return new Response(JSON.stringify({ persona: nextVal }), {
           status: 200,
           headers: {
@@ -122,6 +222,12 @@ export function startgoalsServer(portOverride?: number) {
       }
 
       // 6. REST API Endpoints
+      // GET /api/projects
+      if (pathname.endsWith('/api/projects') && req.method === 'GET') {
+        const projects = listProjects(orgId);
+        return new Response(JSON.stringify(projects), { headers: { 'Content-Type': 'application/json' } });
+      }
+
       if (pathname.includes('/api/boards')) {
         const parts = pathname.split('/').filter(Boolean);
         const boardId = parts[parts.indexOf('boards') + 1];
@@ -142,7 +248,7 @@ export function startgoalsServer(portOverride?: number) {
 
         // GET /api/boards/:id
         if (boardId && !action && req.method === 'GET') {
-          const board = getBoardById(boardId, orgId);
+          const board = getBoardById(boardId, orgId, user);
           return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
         }
 
@@ -153,24 +259,61 @@ export function startgoalsServer(portOverride?: number) {
           return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
         }
 
+        // PATCH /api/boards/:id/items/:itemId/progress (Execution phase progress update)
+        if (boardId && action === 'items' && req.method === 'PATCH') {
+          const partsList = pathname.split('/');
+          const itemId = partsList[partsList.indexOf('items') + 1];
+          const body = await req.json();
+          const board = updateItemProgress(boardId, itemId, body.progressPercent, body.status, user);
+          return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
+        }
+
         // POST /api/boards/:id/submit (Locks board)
         if (boardId && action === 'submit' && req.method === 'POST') {
           const board = submitBoard(boardId, user);
           return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
         }
 
-        // POST /api/boards/:id/review (Manager approval or rework)
+        // POST /api/boards/:id/review (Manager & Contributor review decisions)
         if (boardId && action === 'review' && req.method === 'POST') {
           const body = await req.json();
-          const board = body.decision === 'APPROVE'
-            ? approveBoard(boardId, user, body.comment)
-            : requestRework(boardId, user, body.comment, body.itemId);
+          let board;
+          if (body.decision === 'APPROVE') {
+            board = approveBoard(boardId, user, body.comment);
+          } else if (body.decision === 'REWORK') {
+            board = requestRework(boardId, user, body.comment, body.itemId);
+          } else if (body.decision === 'REQUEST_UNLOCK') {
+            board = requestBoardUnlock(boardId, user, body.comment);
+          } else if (body.decision === 'UNLOCK') {
+            board = unlockBoard(boardId, user, body.comment);
+          } else if (body.decision === 'SET_DEADLINE') {
+            board = setSubmissionDeadline(boardId, user, body.deadline);
+          } else {
+            board = requestRework(boardId, user, body.comment, body.itemId);
+          }
+          return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
+        }
+
+        // POST /api/boards/:id/comments (Post feedback comment to review timeline)
+        if (boardId && action === 'comments' && req.method === 'POST') {
+          const body = await req.json();
+          const board = addReviewComment(boardId, user, body.commentText, body.itemId);
           return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
         }
       }
 
       // Reminders API
       if (pathname.includes('/api/reminders')) {
+        const parts = pathname.split('/').filter(Boolean);
+        const remIndex = parts.indexOf('reminders');
+        const remId = parts[remIndex + 1];
+        const subAction = parts[remIndex + 2];
+
+        if (remId && subAction === 'dismiss' && req.method === 'POST') {
+          dismissReminder(remId, user.id, orgId);
+          return new Response(JSON.stringify({ success: true, id: remId }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+
         const reminders = listUserReminders(user.id, orgId);
         return new Response(JSON.stringify(reminders), { headers: { 'Content-Type': 'application/json' } });
       }
@@ -179,29 +322,8 @@ export function startgoalsServer(portOverride?: number) {
       if (pathname.endsWith('/api/views') && req.method === 'GET') {
         const tabParam = url.searchParams.get('tab') || 'dashboard';
         const boardIdParam = url.searchParams.get('id');
-        const allBoards = listBoards(orgId);
-        const allProjects = listProjects(orgId);
 
-        let contentHtml = '';
-        let activeTab: string = tabParam;
-
-        if (tabParam === 'board' && boardIdParam) {
-          const board = getBoardById(boardIdParam, orgId);
-          contentHtml = renderBoardView(user, board);
-          activeTab = 'board';
-        } else if (tabParam === 'boards') {
-          contentHtml = renderBoardsView(user, allBoards, allProjects);
-          activeTab = 'boards';
-        } else if (tabParam === 'reviews') {
-          const pending = listPendingReviews(orgId);
-          const approved = allBoards.filter(b => b.status === 'APPROVED');
-          contentHtml = renderManagerView(user, pending, approved);
-        } else if (tabParam === 'explore') {
-          contentHtml = renderExploreView(user, allBoards);
-        } else {
-          contentHtml = renderDashboardView(user, allBoards, allProjects);
-          activeTab = 'dashboard';
-        }
+        const { contentHtml, activeTab } = resolveViewContent(tabParam, boardIdParam, user, orgId);
 
         return new Response(JSON.stringify({
           html: contentHtml,
@@ -216,33 +338,12 @@ export function startgoalsServer(portOverride?: number) {
       // 8. Full UI View Controller (Initial Page Load)
       const tabParam = url.searchParams.get('tab') || 'dashboard';
       const boardIdParam = url.searchParams.get('id');
-      const allBoards = listBoards(orgId);
-      const allProjects = listProjects(orgId);
       const reminders = listUserReminders(user.id, orgId);
 
-      let contentHtml = '';
-      let activeTab: any = tabParam;
-
-      if (tabParam === 'board' && boardIdParam) {
-        const board = getBoardById(boardIdParam, orgId);
-        contentHtml = renderBoardView(user, board);
-        activeTab = 'board';
-      } else if (tabParam === 'boards') {
-        contentHtml = renderBoardsView(user, allBoards, allProjects);
-        activeTab = 'boards';
-      } else if (tabParam === 'reviews') {
-        const pending = listPendingReviews(orgId);
-        const approved = allBoards.filter(b => b.status === 'APPROVED');
-        contentHtml = renderManagerView(user, pending, approved);
-      } else if (tabParam === 'explore') {
-        contentHtml = renderExploreView(user, allBoards);
-      } else {
-        contentHtml = renderDashboardView(user, allBoards, allProjects);
-        activeTab = 'dashboard';
-      }
+      const { contentHtml, activeTab } = resolveViewContent(tabParam, boardIdParam, user, orgId);
 
       const fullHtml = renderLayout({
-        activeTab,
+        activeTab: activeTab as any,
         user,
         reminders,
         contentHtml,

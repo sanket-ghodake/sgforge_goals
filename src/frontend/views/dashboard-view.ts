@@ -42,9 +42,6 @@ export function renderDashboardView(user: AuthUser, boards: GoalBoard[], project
           </p>
         </div>
         <div style="display: flex; gap: 10px; align-items: center;">
-          <span class="magic-pulse-beacon">
-            Cycle 2026-Q1 Active
-          </span>
           <a href="?tab=boards" onclick="navigateSpa('boards', null, event)" class="btn-action btn-primary">
             ${icons.layers} Manage Goal Boards ${icons.arrowRight}
           </a>
@@ -126,34 +123,6 @@ export function renderDashboardView(user: AuthUser, boards: GoalBoard[], project
             <div style="font-size: 1.25rem; font-weight: 700; color: var(--forge-text-main);">${learningCount} items</div>
           </div>
         </div>
-      </div>
-
-      <!-- Quick Shortcuts & Recent Overview -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-        <h3 style="font-size: 1.05rem; font-weight: 700;">Active Board Highlights</h3>
-        <a href="?tab=boards" onclick="navigateSpa('boards', null, event)" style="font-size: 0.8rem; color: var(--forge-primary); text-decoration: none; font-weight: 600;">
-          View All Boards (${myBoards.length}) ${icons.arrowRight}
-        </a>
-      </div>
-
-      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
-        ${myBoards.slice(0, 3).map(board => `
-          <div style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 12px; padding: 18px; display: flex; flex-direction: column;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
-              <span style="font-size: 0.75rem; font-weight: 600; color: var(--forge-primary);">${board.projectName || 'Project'}</span>
-              <span style="font-size: 0.75rem; padding: 2px 8px; border-radius: 9999px; background: rgba(255,255,255,0.06); color: var(--forge-text-muted); font-weight: 600;">
-                ${board.cycle}
-              </span>
-            </div>
-            <h4 style="font-size: 1rem; font-weight: 700; margin-bottom: 8px;">
-              <a href="?tab=board&id=${board.id}" onclick="navigateSpa('board', '${board.id}', event)" style="color: var(--forge-text-main); text-decoration: none;">${board.title}</a>
-            </h4>
-            <div style="font-size: 0.8rem; color: var(--forge-text-muted); margin-top: auto; padding-top: 12px; border-top: 1px solid var(--forge-border); display: flex; justify-content: space-between;">
-              <span>Status: <strong style="color: var(--forge-text-main);">${board.status}</strong></span>
-              <a href="?tab=board&id=${board.id}" onclick="navigateSpa('board', '${board.id}', event)" style="color: var(--forge-primary); text-decoration: none; font-weight: 600;">Open ${icons.arrowRight}</a>
-            </div>
-          </div>
-        `).join('')}
       </div>
     </div>
   `;

@@ -48,7 +48,7 @@ describe('Tier 2 Integration: Goal Center REST API Dispatcher', () => {
       expect(board.id).toBeDefined();
       expect(board.status).toBe('DRAFT');
     } finally {
-      server.stop();
+      server.stop(true);
     }
   });
 
@@ -74,7 +74,7 @@ describe('Tier 2 Integration: Goal Center REST API Dispatcher', () => {
       expect(body.persona).toBeDefined();
       expect(setCookie).toContain('goals_persona=');
     } finally {
-      server.stop();
+      server.stop(true);
     }
   });
 
@@ -106,8 +106,92 @@ describe('Tier 2 Integration: Goal Center REST API Dispatcher', () => {
       expect(boardsRes.status).toBe(200);
       expect(boardsBody.activeTab).toBe('boards');
       expect(boardsBody.html).toContain('My Goal Boards');
+
+      // Act 3: GET api/views?tab=reviews
+      const reviewsRes = await fetch(`${baseUrl}/api/views?tab=reviews`, {
+        headers: { 'Cookie': `forge_session=${token}` },
+      });
+      const reviewsBody = await reviewsRes.json();
+
+      // Assert 3
+      expect(reviewsRes.status).toBe(200);
+      expect(reviewsBody.html).toContain('Reviews & Approvals Hub');
+      expect(reviewsBody.html).toContain('My Submissions');
+      expect(reviewsBody.html).toContain('Team Reviews');
+
+      // Act 4: POST api/boards/:id/comments
+      const listBoardsRes = await fetch(`${baseUrl}/api/boards`, { headers: { 'Cookie': `forge_session=${token}` } });
+      const boardsList = await listBoardsRes.json();
+      const targetBoardId = boardsList[0].id;
+
+      const commentRes = await fetch(`${baseUrl}/api/boards/${targetBoardId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cookie': `forge_session=${token}`,
+        },
+        body: JSON.stringify({ commentText: 'Integ test feedback comment' }),
+      });
+      const boardWithComments = await commentRes.json();
+
+      // Assert 4
+      expect(commentRes.status).toBe(200);
+      expect(boardWithComments.comments).toBeDefined();
+      expect(boardWithComments.comments.some((c: any) => c.commentText === 'Integ test feedback comment')).toBe(true);
     } finally {
-      server.stop();
+      server.stop(true);
+    }
+  });
+
+  it('Arrange, Act, Assert: handles auth login and logout endpoints', async () => {
+    // Arrange
+    const server = startgoalsServer(0);
+    const token = createInternalServiceToken(['roles/employee'], 'usr_integ_1');
+    const baseUrl = `http://localhost:${server.port}`;
+
+    try {
+      // Act 1: POST api/auth/login with solo persona
+      const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cookie': `forge_session=${token}`,
+        },
+        body: JSON.stringify({ persona: 'solo' }),
+      });
+      const loginBody = await loginRes.json();
+      const loginCookie = loginRes.headers.get('set-cookie');
+
+      // Assert 1
+      expect(loginRes.status).toBe(200);
+      expect(loginBody.success).toBe(true);
+      expect(loginCookie).toContain('goals_persona=solo');
+
+      // Act 2: GET api/auth/users
+      const usersRes = await fetch(`${baseUrl}/api/auth/users`, {
+        headers: { 'Cookie': `forge_session=${token}` },
+      });
+      const users = await usersRes.json();
+
+      // Assert 2
+      expect(usersRes.status).toBe(200);
+      expect(Array.isArray(users)).toBe(true);
+      expect(users.some((u: any) => u.id === 'usr_solo')).toBe(true);
+
+      // Act 3: POST api/auth/logout
+      const logoutRes = await fetch(`${baseUrl}/api/auth/logout`, {
+        method: 'POST',
+        headers: { 'Cookie': `forge_session=${token}` },
+      });
+      const logoutBody = await logoutRes.json();
+      const logoutCookie = logoutRes.headers.get('set-cookie');
+
+      // Assert 3
+      expect(logoutRes.status).toBe(200);
+      expect(logoutBody.success).toBe(true);
+      expect(logoutCookie).toContain('Expires=Thu, 01 Jan 1970');
+    } finally {
+      server.stop(true);
     }
   });
 });

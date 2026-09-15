@@ -13,7 +13,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "incremental": true,
-    "baseUrl": "."
+    "types": ["bun"]
   },
   "include": [
     "src/**/*.ts",

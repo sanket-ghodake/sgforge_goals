@@ -5,6 +5,7 @@
  */
 
 import { icons } from '../../lib/icons';
+import { escapeHtml, getStatusBadge } from '../../lib/ui';
 import type { AuthUser, GoalBoard, Project } from '../../lib/types';
 
 export function renderBoardsView(user: AuthUser, boards: GoalBoard[], projects: Project[]): string {
@@ -73,9 +74,11 @@ export function renderBoardsView(user: AuthUser, boards: GoalBoard[], projects: 
                 <span>${icons.layers} Rev ${board.revisionNumber}</span>
               </div>
 
-              <div style="margin-top: auto; padding-top: 14px; border-top: 1px solid var(--forge-border); display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.75rem; color: var(--forge-text-subtle);">Updated ${new Date(board.updatedAt).toLocaleDateString()}</span>
-                <a href="?tab=board&id=${board.id}" onclick="navigateSpa('board', '${board.id}', event)" class="btn-action btn-outline" style="height: 30px; font-size: 0.8rem;">
+              <div style="margin-top: auto; padding-top: 14px; border-top: 1px solid var(--forge-border); display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                <button class="btn-action btn-outline" style="height: 30px; font-size: 0.775rem; padding: 0 10px;" onclick="openReviewDrawer('${board.id}')">
+                  ${icons.messageSquare} Timeline
+                </button>
+                <a href="?tab=board&id=${board.id}" onclick="navigateSpa('board', '${board.id}', event)" class="btn-action btn-outline" style="height: 30px; font-size: 0.775rem; padding: 0 10px;">
                   Open Board ${icons.arrowRight}
                 </a>
               </div>
@@ -117,29 +120,4 @@ export function renderBoardsView(user: AuthUser, boards: GoalBoard[], projects: 
       })();
     </script>
   `;
-}
-
-function getStatusBadge(status: string): { label: string; style: string } {
-  switch (status) {
-    case 'SUBMITTED':
-      return {
-        label: 'Under Review',
-        style: 'background: var(--forge-warning-bg); color: var(--forge-warning); border: 1px solid rgba(251, 191, 36, 0.3);',
-      };
-    case 'REWORK_REQUESTED':
-      return {
-        label: 'Revisions Requested',
-        style: 'background: var(--forge-error-bg); color: var(--forge-error); border: 1px solid rgba(248, 113, 113, 0.3);',
-      };
-    case 'APPROVED':
-      return {
-        label: 'Approved & Sealed',
-        style: 'background: var(--forge-success-bg); color: var(--forge-success); border: 1px solid rgba(52, 211, 153, 0.3);',
-      };
-    default:
-      return {
-        label: 'Draft (Editable)',
-        style: 'background: rgba(255, 255, 255, 0.05); color: var(--forge-text-muted); border: 1px solid var(--forge-border);',
-      };
-  }
 }

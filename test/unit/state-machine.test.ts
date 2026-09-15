@@ -165,6 +165,37 @@ describe('Tier 1 Unit: Goal Board State Machine & Lock Lifecycle', () => {
         progressPercent: 0,
         status: 'PENDING',
       }],
-    }, testUser)).toThrow(/permanently sealed/);
+    }, testUser)).toThrow(/approved and sealed/);
+  });
+
+  it('Arrange, Act, Assert: handles submission gracefully when employee has no assigned manager', () => {
+    // Arrange: User with no manager assigned
+    const unmanagedUser: AuthUser = {
+      id: `usr_solo_${Date.now()}`,
+      email: 'solo@forge.internal',
+      displayName: 'Solo Contributor',
+      roles: ['roles/employee'],
+      orgId: 'org_test_unit',
+      managerId: null,
+      managerName: null,
+      managerEmail: null,
+    };
+
+    const board = createBoard({
+      projectId: 'proj_titan',
+      title: 'Solo Unmanaged Plan',
+      cycle: '2026-Q1',
+    }, unmanagedUser);
+
+    // Act
+    const submitted = submitBoard(board.id, unmanagedUser);
+
+    // Assert
+    expect(submitted.status).toBe('SUBMITTED');
+    expect(submitted.submittedAt).toBeDefined();
+    // Verify system audit comment added for unmanaged submission
+    const refreshed = getBoardById(board.id, 'org_test_unit');
+    const comments = refreshed.comments || [];
+    expect(comments.some(c => c.commentText.includes('routed for Admin review') || c.commentText.includes('no assigned manager'))).toBeTrue();
   });
 });

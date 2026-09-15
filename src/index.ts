@@ -1,6 +1,7 @@
 /**
  * @forge-apps/app-template - Forge App Submodule Template Entrypoint (2026 LTS)
  * Exports server bootstrap and domain modules
+ * @requirements [HLR-GOALS-001]
  */
 
 export * from './server';

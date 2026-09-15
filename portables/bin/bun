@@ -9,20 +9,16 @@ APP_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOCAL_BUN="$APP_ROOT/portables/bun/bin/bun"
 PARENT_BUN="$APP_ROOT/../../portables/bun/bin/bun"
 
-if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ]; then
-    if [ -x "$LOCAL_BUN" ]; then
-        exec "$LOCAL_BUN" "$@"
-    elif [ -x "$PARENT_BUN" ]; then
-        exec "$PARENT_BUN" "$@"
-    fi
-fi
+# Resolve host system bun by excluding SCRIPT_DIR from PATH to prevent self-recursion
+CLEAN_PATH="$(echo "$PATH" | tr ':' '\n' | grep -v "^$SCRIPT_DIR$" | tr '\n' ':')"
+HOST_BUN="$(PATH="$CLEAN_PATH" command -v bun 2>/dev/null || true)"
 
-if [ -x "$LOCAL_BUN.exe" ]; then
+if [ -n "$HOST_BUN" ] && [ -x "$HOST_BUN" ]; then
+    exec "$HOST_BUN" "$@"
+elif [ -x "$LOCAL_BUN.exe" ]; then
     exec "$LOCAL_BUN.exe" "$@"
 elif [ -x "$PARENT_BUN.exe" ]; then
     exec "$PARENT_BUN.exe" "$@"
-elif command -v bun >/dev/null 2>&1; then
-    exec bun "$@"
 else
     echo "❌ [Forge App] Bun runtime not found in local portables, parent monorepo, or host PATH." >&2
     echo "   👉 Run './run.sh setup' to bootstrap the environment or install Bun from https://bun.sh" >&2

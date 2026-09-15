@@ -24,7 +24,7 @@ describe('Tier 2 Integration: Individual Goal Center Health Probes', () => {
       expect(data.livez).toBe(true);
       expect(data.readyz).toBe(true);
     } finally {
-      server.stop();
+      server.stop(true);
     }
   });
 });

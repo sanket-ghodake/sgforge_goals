@@ -7,4 +7,4 @@ Houses HTML/TS view renderer components:
 - `cockpit-view.ts`: Tab 1 dashboard presenting milestone progress HUDs and active boards.
 - `board-view.ts`: Tab 2 interactive goal board canvas with weight sum meter and transactional lock banners.
 - `manager-view.ts`: Tab 3 review queue, rework dialogue, and signoff approval controls.
-- `explore-view.ts`: Tab 4 org-wide Hall of Impact directory.
+- `explore-view.ts`: Tab 4 org-wide Org Impact Directory Data Table.

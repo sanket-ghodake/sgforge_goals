@@ -8,6 +8,8 @@
 import { icons } from '../../lib/icons';
 import { getLayoutStyles } from './layout-styles';
 import { getAstryxToastScript, getAstryxTooltipScript } from '../../lib/ui';
+import { getReviewDrawerScript } from './review-drawer';
+import { renderLogoutModal, renderNewBoardModal, renderRemindersDrawer, renderReworkModal } from './modals';
 import type { AuthUser, Reminder } from '../../lib/types';
 
 export interface LayoutOptions {
@@ -58,11 +60,6 @@ export function renderLayout(options: LayoutOptions): string {
     </div>
 
     <div class="header-right">
-      <!-- Role Persona Switcher -->
-      <button class="btn-action btn-outline" onclick="togglePersonaSpa()" data-astryx-tooltip="Switch between Contributor and Manager persona for demo testing">
-        ${icons.user} <span id="personaLabel">${isManager ? 'Manager (Sarah)' : 'Employee (Jane)'}</span>
-      </button>
-
       <!-- Action Alerts Bell with Unread Count -->
       <button class="btn-icon" onclick="openRemindersDrawer()" data-astryx-tooltip="Action Alerts & Reminders">
         ${icons.bell}
@@ -93,13 +90,13 @@ export function renderLayout(options: LayoutOptions): string {
 
         <a href="?tab=reviews" onclick="navigateSpa('reviews', null, event)" class="sb-nav-item ${activeTab === 'reviews' ? 'active' : ''}" data-tab="reviews">
           <span class="sb-nav-icon">${icons.shieldAlert}</span>
-          <span class="sb-nav-label">Manager Reviews</span>
+          <span class="sb-nav-label">Reviews Hub</span>
           <span class="sb-badge" id="sbBadgeReviews" style="display: ${unreadAlerts > 0 ? 'inline-block' : 'none'};">${unreadAlerts}</span>
         </a>
 
         <a href="?tab=explore" onclick="navigateSpa('explore', null, event)" class="sb-nav-item ${activeTab === 'explore' ? 'active' : ''}" data-tab="explore">
           <span class="sb-nav-icon">${icons.compass}</span>
-          <span class="sb-nav-label">Hall of Impact</span>
+          <span class="sb-nav-label">Org Impact Directory</span>
         </a>
 
         <a href="javascript:void(0)" onclick="openRemindersDrawer()" class="sb-nav-item" data-tab="reminders">
@@ -114,6 +111,11 @@ export function renderLayout(options: LayoutOptions): string {
           <span class="sb-nav-icon">${icons.pin}</span>
           <span class="sb-nav-label">Pin Sidebar</span>
         </button>
+
+        <button class="sb-nav-item" style="border:none; width: 100%; text-align: left; cursor: pointer; background: transparent; color: var(--forge-error);" onclick="openLogoutModal()" data-astryx-tooltip="Logout from session">
+          <span class="sb-nav-icon">${icons.logOut}</span>
+          <span class="sb-nav-label">Logout</span>
+        </button>
       </div>
     </aside>
 
@@ -126,78 +128,18 @@ export function renderLayout(options: LayoutOptions): string {
   </div>
 
   <!-- 3. MODALS & DRAWERS -->
-  <!-- New Board Modal -->
-  <div class="modal-backdrop" id="newBoardModal" onclick="if(event.target === this) closeNewBoardModal()">
-    <div class="modal-box">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 style="font-size: 1.1rem; font-weight: 700;">Create Project Goal Board</h3>
-        <button class="btn-icon" onclick="closeNewBoardModal()">${icons.close}</button>
-      </div>
+  ${renderNewBoardModal()}
+  ${renderRemindersDrawer(reminders)}
+  ${renderReworkModal()}
 
-      <form id="newBoardForm" onsubmit="handleCreateBoard(event)">
-        <div style="margin-bottom: 14px;">
-          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--forge-text-muted);">Assigned Project</label>
-          <select id="boardProjectSelect" class="shadcn-select" required>
-            <option value="proj_titan">Project Titan (Core API Gateway)</option>
-            <option value="proj_apollo">Project Apollo (Telemetry Agent)</option>
-            <option value="proj_hermes">Project Hermes (Edge Storage Fabric)</option>
-          </select>
-        </div>
-
-        <div style="margin-bottom: 14px;">
-          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--forge-text-muted);">Board Title</label>
-          <input id="boardTitleInput" type="text" placeholder="e.g. Q1 Distributed Mesh Resilience" required style="width: 100%; height: 38px; border-radius: 7px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 0 12px; font-size: 0.875rem;" />
-        </div>
-
-        <div style="margin-bottom: 20px;">
-          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--forge-text-muted);">Evaluation Cycle</label>
-          <select id="boardCycleSelect" class="shadcn-select" required>
-            <option value="2026-Q1">2026-Q1 (Current Active)</option>
-            <option value="2026-Q2">2026-Q2 (Upcoming)</option>
-          </select>
-        </div>
-
-        <div style="display: flex; justify-content: flex-end; gap: 10px;">
-          <button type="button" class="btn-action btn-outline" onclick="closeNewBoardModal()">Cancel</button>
-          <button type="submit" class="btn-action btn-primary">${icons.plus} Create Board</button>
-        </div>
-      </form>
+  <!-- Right-Sliding WhatsApp-Style Review Timeline Drawer -->
+  <div class="drawer-backdrop" id="reviewTimelineDrawer" onclick="if(event.target === this) closeReviewDrawer()">
+    <div class="drawer-pane" id="reviewDrawerPane">
+      <!-- Dynamically populated by openReviewDrawer(boardId) script -->
     </div>
   </div>
 
-  <!-- Reminders Slide-Over Drawer -->
-  <div class="modal-backdrop" id="remindersDrawer" onclick="if(event.target === this) closeRemindersDrawer()">
-    <div class="modal-box" style="margin-left: auto; max-width: 440px; height: 100vh; border-radius: 0; display: flex; flex-direction: column;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="color: var(--forge-warning);">${icons.bell}</span>
-          <h3 style="font-size: 1.1rem; font-weight: 700;">Action Alerts & Reminders</h3>
-        </div>
-        <button class="btn-icon" onclick="closeRemindersDrawer()">${icons.close}</button>
-      </div>
-
-      <div id="remindersListContainer" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
-        ${reminders.length === 0 ? `
-          <div style="padding: 40px 20px; text-align: center; color: var(--forge-text-muted); font-size: 0.875rem;">
-            ${icons.checkCircle} All caught up! Zero pending actions.
-          </div>
-        ` : reminders.map(r => `
-          <div id="reminder-card-${r.id}" style="background: var(--forge-bg-surface); border: 1px solid var(--forge-border); border-radius: 10px; padding: 14px; position: relative;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-              <span style="font-size: 0.75rem; font-weight: 700; color: ${r.type === 'REWORK_REQUIRED' ? 'var(--forge-warning)' : r.type === 'PENDING_APPROVAL' ? 'var(--forge-primary)' : 'var(--forge-accent)'};">
-                ${r.type.replace('_', ' ')}
-              </span>
-              <button onclick="dismissReminderSpa('${r.id}')" style="background:none; border:none; color:var(--forge-text-muted); cursor:pointer; font-size:0.75rem;">Dismiss</button>
-            </div>
-            <p style="font-size: 0.85rem; color: var(--forge-text-main); margin-bottom: 8px; line-height: 1.4;">${r.message}</p>
-            <a href="?tab=board&id=${r.boardId}" onclick="navigateSpa('board', '${r.boardId}', event)" class="btn-action btn-outline" style="height: 26px; font-size: 0.75rem; padding: 0 8px;">
-              View Board ${icons.arrowRight}
-            </a>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  </div>
+  ${renderLogoutModal(user)}
 
   ${getAstryxToastScript()}
   ${getAstryxTooltipScript()}
@@ -240,7 +182,8 @@ export function renderLayout(options: LayoutOptions): string {
           if (bcTab) bcTab.textContent = data.activeTab || tab;
 
           document.querySelectorAll('.sb-nav-item').forEach(el => {
-            if (el.dataset.tab === data.activeTab) {
+            const isBoardMatch = (data.activeTab === 'board' || data.activeTab === 'boards') && el.dataset.tab === 'boards';
+            if (el.dataset.tab === data.activeTab || isBoardMatch) {
               el.classList.add('active');
             } else {
               el.classList.remove('active');
@@ -259,7 +202,7 @@ export function renderLayout(options: LayoutOptions): string {
 
     window.addEventListener('popstate', function(e) {
       const urlParams = new URLSearchParams(window.location.search);
-      const tab = urlParams.get('tab') || 'cockpit';
+      const tab = urlParams.get('tab') || 'dashboard';
       const boardId = urlParams.get('id');
       loadSpaView(tab, boardId);
     });
@@ -286,15 +229,82 @@ export function renderLayout(options: LayoutOptions): string {
         .then(res => res.json())
         .then(data => {
           const label = document.getElementById('personaLabel');
-          if (label) label.textContent = data.persona === 'manager' ? 'Manager (Sarah)' : 'Employee (Jane)';
-          if (window.astryxToast) window.astryxToast('Switched to ' + data.persona.toUpperCase() + ' persona', 'info');
+          const titleMap = {
+            manager: 'Manager (Sarah)',
+            solo: 'Employee (Morgan - No Mgr)',
+            employee: 'Employee (Jane)'
+          };
+          if (label) label.textContent = titleMap[data.persona] || data.persona;
+          if (window.astryxToast) window.astryxToast('Switched persona to ' + (titleMap[data.persona] || data.persona), 'info');
           const urlParams = new URLSearchParams(window.location.search);
-          loadSpaView(urlParams.get('tab') || 'cockpit', urlParams.get('id'));
+          loadSpaView(urlParams.get('tab') || 'dashboard', urlParams.get('id'));
         });
     }
 
+    function openLogoutModal() {
+      const modal = document.getElementById('logoutModal');
+      if (modal) modal.classList.add('open');
+    }
+
+    function closeLogoutModal() {
+      const modal = document.getElementById('logoutModal');
+      if (modal) modal.classList.remove('open');
+    }
+
+    function confirmLogout() {
+      fetch('api/auth/logout', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          closeLogoutModal();
+          if (window.astryxToast) window.astryxToast('Session invalidated. Redirecting to SG Forge SSO...', 'info');
+          setTimeout(() => {
+            window.location.href = data.redirectUrl || '/auth/login';
+          }, 400);
+        })
+        .catch(() => {
+          window.location.href = '/auth/login';
+        });
+    }
+
+    function openLoginModal() {
+      const modal = document.getElementById('loginModal');
+      if (modal) modal.classList.add('open');
+    }
+
+    function closeLoginModal() {
+      const modal = document.getElementById('loginModal');
+      if (modal) modal.classList.remove('open');
+    }
+
+    function selectPersona(persona) {
+      fetch('api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ persona })
+      })
+      .then(res => res.json())
+      .then(data => {
+        closeLoginModal();
+        if (window.astryxToast) window.astryxToast('Authenticated as ' + persona.toUpperCase(), 'success');
+        const urlParams = new URLSearchParams(window.location.search);
+        loadSpaView(urlParams.get('tab') || 'dashboard', urlParams.get('id'));
+      });
+    }
+
     function openNewBoardModal() {
-      document.getElementById('newBoardModal').classList.add('open');
+      const modal = document.getElementById('newBoardModal');
+      const select = document.getElementById('boardProjectSelect');
+      if (modal) modal.classList.add('open');
+      if (select) {
+        fetch('api/projects')
+          .then(res => res.json())
+          .then(projects => {
+            if (projects && projects.length > 0) {
+              select.innerHTML = projects.map(p => '<option value="' + p.id + '">' + p.name + ' (' + p.code + ')</option>').join('');
+            }
+          })
+          .catch(() => {});
+      }
     }
 
     function closeNewBoardModal() {
@@ -339,7 +349,19 @@ export function renderLayout(options: LayoutOptions): string {
         if (window.astryxToast) window.astryxToast('Failed to create board: ' + err.message, 'error');
       });
     }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        if (typeof closeNewBoardModal === 'function') closeNewBoardModal();
+        if (typeof closeReworkModal === 'function') closeReworkModal();
+        if (typeof closeReviewDrawer === 'function') closeReviewDrawer();
+        if (typeof closeRemindersDrawer === 'function') closeRemindersDrawer();
+      }
+    });
+
+    ${getReviewDrawerScript()}
   </script>
 </body>
 </html>`;
 }
+

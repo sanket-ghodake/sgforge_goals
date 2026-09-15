@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import { createBoard, getBoardById, updateGoalItems } from '../../src/backend/services/board-service';
+import { addReviewComment } from '../../src/backend/services/review-service';
 import type { AuthUser } from '../../src/lib/types';
 
 describe('Tier 3 Security: Multi-Tenant & RBAC Isolation Invariants', () => {
@@ -65,5 +66,21 @@ describe('Tier 3 Security: Multi-Tenant & RBAC Isolation Invariants', () => {
         status: 'PENDING',
       }],
     }, userHacker)).toThrow(/Only the goal board owner can edit milestones/);
+  });
+
+  it('Arrange, Act, Assert: restricts review timeline comments access to board owner and manager', () => {
+    // Arrange: Alpha Employee owns board
+    const alphaBoard = createBoard({
+      projectId: 'proj_titan',
+      title: 'Confidential Review Board',
+      cycle: '2026-Q1',
+    }, userOrgAlpha);
+
+    // Act: Malicious Colleague (not owner, not manager) tries to fetch board
+    const restrictedBoard = getBoardById(alphaBoard.id, 'org_alpha', userHacker);
+    expect(restrictedBoard.comments).toEqual([]);
+
+    // Act & Assert: Malicious Colleague tries to post comment to review timeline
+    expect(() => addReviewComment(alphaBoard.id, userHacker, 'Unauthorized comment')).toThrow(/Security Restricted/);
   });
 });

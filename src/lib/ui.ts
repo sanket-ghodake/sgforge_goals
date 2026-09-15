@@ -435,3 +435,54 @@ export function getModernHeaderHtml(title: string, badgeText: string = 'FORGE AP
 }
 
 export const getAstryxHeaderHtml = getModernHeaderHtml;
+
+export function escapeHtml(unsafe: string | null | undefined): string {
+  if (!unsafe) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+export function getStatusBadge(status: string): { label: string; style: string } {
+  switch (status) {
+    case 'SUBMITTED':
+      return {
+        label: 'Under Review (Locked)',
+        style: 'background: var(--forge-warning-bg); color: var(--forge-warning); border: 1px solid rgba(245, 158, 11, 0.35);',
+      };
+    case 'REWORK_REQUESTED':
+      return {
+        label: 'Revisions Requested',
+        style: 'background: var(--forge-error-bg); color: var(--forge-error); border: 1px solid rgba(239, 68, 68, 0.35);',
+      };
+    case 'APPROVED':
+      return {
+        label: 'Approved & Sealed',
+        style: 'background: var(--forge-success-bg); color: var(--forge-success); border: 1px solid rgba(16, 185, 129, 0.35);',
+      };
+    case 'LOCKED_OVERDUE':
+      return {
+        label: 'Deadline Passed (Locked)',
+        style: 'background: var(--forge-error-bg); color: var(--forge-error); border: 1px solid rgba(239, 68, 68, 0.35);',
+      };
+    case 'UNLOCK_REQUESTED':
+      return {
+        label: 'Unlock Pending',
+        style: 'background: var(--forge-warning-bg); color: var(--forge-warning); border: 1px solid rgba(245, 158, 11, 0.35);',
+      };
+    case 'COMPLETED':
+      return {
+        label: 'Completed',
+        style: 'background: var(--forge-success-bg); color: var(--forge-success); border: 1px solid rgba(16, 185, 129, 0.35);',
+      };
+    default:
+      return {
+        label: 'Draft (Editable)',
+        style: 'background: rgba(255, 255, 255, 0.05); color: var(--forge-text-muted); border: 1px solid var(--forge-border);',
+      };
+  }
+}
+

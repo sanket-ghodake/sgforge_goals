@@ -13,7 +13,7 @@ networks:
 
   # 2. Reverse-Proxy Gateway Mesh (Inbound routing from Caddy proxy only)
   forge-gateway-net:
-    name: ${FORGE_APPS_NETWORK:-${CONTAINER_PREFIX:-ag}_forge_apps_net}
+    name: ${FORGE_APPS_NETWORK:-ag_forge_apps_net}
     external: true
 
 services:

@@ -12,6 +12,21 @@ export interface AuthUser {
   principalType?: string;
   department?: string;
   orgId?: string;
+  managerId?: string | null;
+  managerName?: string | null;
+  managerEmail?: string | null;
+}
+
+export interface UserRow {
+  id: string;
+  email: string;
+  display_name: string;
+  roles: string;
+  department: string;
+  manager_id?: string | null;
+  manager_name?: string | null;
+  manager_email?: string | null;
+  created_at: number;
 }
 
 export interface AuthGuardOptions {
@@ -67,7 +82,7 @@ export interface Project {
   createdAt: number;
 }
 
-export type GoalBoardStatus = 'DRAFT' | 'SUBMITTED' | 'REWORK_REQUESTED' | 'APPROVED' | 'ARCHIVED';
+export type GoalBoardStatus = 'DRAFT' | 'SUBMITTED' | 'REWORK_REQUESTED' | 'APPROVED' | 'LOCKED_OVERDUE' | 'UNLOCK_REQUESTED' | 'COMPLETED' | 'ARCHIVED';
 
 export type GoalCategory = 'DELIVERABLE' | 'METRIC' | 'LEARNING';
 
@@ -97,21 +112,24 @@ export interface GoalBoard {
   ownerName: string;
   ownerEmail: string;
   ownerDepartment: string;
+  managerName?: string | null;
   title: string;
   cycle: string;
   status: GoalBoardStatus;
   lockVersion: number;
   revisionNumber: number;
+  submissionDeadline?: string | null;
   submittedAt?: number | null;
   approvedAt?: number | null;
   approvedBy?: string | null;
+  unlockedAt?: number | null;
   createdAt: number;
   updatedAt: number;
   items?: GoalItem[];
   comments?: ReviewComment[];
 }
 
-export type ReviewCommentType = 'FEEDBACK' | 'REWORK_REQUEST' | 'APPROVAL_NOTE';
+export type ReviewCommentType = 'FEEDBACK' | 'REWORK_REQUEST' | 'APPROVAL_NOTE' | 'UNLOCK_REQUEST' | 'DEADLINE_SET' | 'UNLOCKED';
 
 export interface ReviewComment {
   id: string;
@@ -125,7 +143,7 @@ export interface ReviewComment {
   createdAt: number;
 }
 
-export type ReminderType = 'SUBMISSION_DUE' | 'PENDING_APPROVAL' | 'REWORK_REQUIRED';
+export type ReminderType = 'SUBMISSION_DUE' | 'PENDING_APPROVAL' | 'REWORK_REQUIRED' | 'UNLOCK_REQUESTED';
 
 export interface Reminder {
   id: string;
@@ -143,6 +161,7 @@ export interface CreateBoardInput {
   projectId: string;
   title: string;
   cycle: string;
+  submissionDeadline?: string;
 }
 
 export interface UpdateGoalItemsInput {
@@ -159,7 +178,85 @@ export interface UpdateGoalItemsInput {
 }
 
 export interface ReviewBoardInput {
-  decision: 'APPROVE' | 'REWORK';
-  comment: string;
+  decision: 'APPROVE' | 'REWORK' | 'UNLOCK' | 'REQUEST_UNLOCK' | 'SET_DEADLINE';
+  comment?: string;
   itemId?: string;
+  deadline?: string;
 }
+
+// -----------------------------------------------------------------------------
+// Database Row Interfaces for Type-Safe SQLite Queries
+// -----------------------------------------------------------------------------
+
+export interface ProjectRow {
+  id: string;
+  org_id: string;
+  name: string;
+  code: string;
+  description: string;
+  manager_id: string;
+  created_at: number;
+}
+
+export interface GoalBoardRow {
+  id: string;
+  org_id: string;
+  project_id: string;
+  project_name?: string;
+  owner_id: string;
+  owner_name: string;
+  owner_email: string;
+  owner_department: string;
+  title: string;
+  cycle: string;
+  status: GoalBoardStatus;
+  lock_version: number;
+  revision_number: number;
+  submission_deadline?: string | null;
+  submitted_at?: number | null;
+  approved_at?: number | null;
+  approved_by?: string | null;
+  unlocked_at?: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface GoalItemRow {
+  id: string;
+  board_id: string;
+  title: string;
+  description: string;
+  category: GoalCategory;
+  target_date: string;
+  weight: number;
+  progress_percent: number;
+  status: GoalItemStatus;
+  sort_order: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface GoalReviewRow {
+  id: string;
+  board_id: string;
+  item_id?: string | null;
+  author_id: string;
+  author_name: string;
+  author_role: string;
+  comment_text: string;
+  type: ReviewCommentType;
+  created_at: number;
+}
+
+export interface ReminderRow {
+  id: string;
+  org_id: string;
+  user_id: string;
+  board_id: string;
+  type: ReminderType;
+  message: string;
+  due_date?: string | null;
+  is_dismissed: number;
+  created_at: number;
+}
+
