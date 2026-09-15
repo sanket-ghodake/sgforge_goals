@@ -19,7 +19,7 @@ import { renderBoardView } from './frontend/views/board-view';
 import { renderManagerView } from './frontend/views/manager-view';
 import { renderExploreView } from './frontend/views/explore-view';
 import { renderLoginView } from './frontend/views/login-view';
-import { getUserById, listUsers } from './db';
+import { getUserById, listUsers, upsertUser } from './db';
 import { createBoard, getBoardById, listBoards, listProjects, submitBoard, updateGoalItems, updateItemProgress } from './backend/services/board-service';
 import { approveBoard, addReviewComment, requestRework, requestBoardUnlock, unlockBoard, setSubmissionDeadline } from './backend/services/review-service';
 import { dismissReminder, listUserReminders } from './backend/services/reminder-service';
@@ -32,40 +32,36 @@ const PORT = Number(process.env.PORT || 8090);
 function getEffectiveUser(baseUser: AuthUser, req: Request): AuthUser {
   const cookieHeader = req.headers.get('cookie') || '';
   
-  let targetUserId = baseUser.id || 'usr_employee';
+  // Dev persona override for explicit testing toggles
   if (cookieHeader.includes('goals_persona=manager')) {
-    targetUserId = 'usr_manager';
+    const mgr = getUserById('usr_manager');
+    if (mgr) return mgr;
   } else if (cookieHeader.includes('goals_persona=solo')) {
-    targetUserId = 'usr_solo';
+    const solo = getUserById('usr_solo');
+    if (solo) return solo;
   } else if (cookieHeader.includes('goals_persona=employee')) {
-    targetUserId = 'usr_employee';
+    const emp = getUserById('usr_employee');
+    if (emp) return emp;
   }
 
-  const dbUser = getUserById(targetUserId);
-  if (dbUser) {
-    return {
-      id: dbUser.id,
-      email: dbUser.email,
-      displayName: dbUser.displayName,
-      roles: dbUser.roles.length > 0 ? dbUser.roles : ['roles/employee'],
-      department: dbUser.department,
-      orgId: baseUser.orgId || 'org_default',
-      managerId: dbUser.managerId,
-      managerName: dbUser.managerName,
-      managerEmail: dbUser.managerEmail,
-    };
+  if (baseUser && baseUser.id) {
+    return upsertUser(baseUser);
   }
+
+  const targetUserId = 'usr_employee';
+  const dbUser = getUserById(targetUserId);
+  if (dbUser) return dbUser;
 
   return {
-    id: baseUser.id || 'usr_employee',
-    email: baseUser.email || 'jane.doe@forge.internal',
-    displayName: baseUser.displayName || 'Jane Doe',
-    roles: baseUser.roles && baseUser.roles.length > 0 ? baseUser.roles : ['roles/employee'],
-    department: baseUser.department || 'Platform Engineering',
-    orgId: baseUser.orgId || 'org_default',
-    managerId: baseUser.managerId ?? 'usr_manager',
-    managerName: baseUser.managerName ?? 'Sarah Connor',
-    managerEmail: baseUser.managerEmail ?? 'sarah.connor@forge.internal',
+    id: 'usr_employee',
+    email: 'jane.doe@forge.internal',
+    displayName: 'Jane Doe',
+    roles: ['roles/employee'],
+    department: 'Platform Engineering',
+    orgId: 'org_default',
+    managerId: 'usr_manager',
+    managerName: 'Sarah Connor',
+    managerEmail: 'sarah.connor@forge.internal',
   };
 }
 
@@ -175,14 +171,14 @@ export function startgoalsServer(portOverride?: number) {
       });
 
       if (!auth.authenticated || !auth.user) {
+        if (auth.response) {
+          return auth.response;
+        }
         if (pathname.includes('/api/')) {
-          return new Response(JSON.stringify({ error: 'Unauthorized', authenticated: false }), {
+          return new Response(JSON.stringify({ error: 'Unauthorized', authenticated: false, code: 'UNAUTHORIZED' }), {
             status: 401,
             headers: { 'Content-Type': 'application/json' },
           });
-        }
-        if (auth.response) {
-          return auth.response;
         }
         return new Response(renderLoginView(), {
           status: 200,

@@ -86,4 +86,62 @@ describe('Tier 3 Security: Individual Goal Center Zero-Trust Auth Gate', () => {
       server.stop(true);
     }
   });
+
+  it('Arrange, Act, Assert: parses snake_case display_name and department claims from JWT', async () => {
+    const server = startgoalsServer(0);
+    const JWT_SECRET = process.env.JWT_SECRET || 'forge-dev-secret-key-goals-2026';
+    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const payload = Buffer.from(
+      JSON.stringify({
+        sub: 'usr_custom_emp',
+        email: 'custom.emp@forge.internal',
+        display_name: 'Custom Employee Name',
+        department: 'Cloud Infrastructure',
+        roles: ['roles/employee'],
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      })
+    ).toString('base64url');
+    const signature = require('node:crypto').createHmac('sha256', JWT_SECRET).update(`${header}.${payload}`).digest('base64url');
+    const token = `${header}.${payload}.${signature}`;
+
+    try {
+      const res = await fetch(`http://localhost:${server.port}/`, {
+        headers: { Cookie: `forge_session=${token}` },
+      });
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain('Custom Employee Name');
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  it('Arrange, Act, Assert: returns 401 for expired token on API endpoints', async () => {
+    const server = startgoalsServer(0);
+    const JWT_SECRET = process.env.JWT_SECRET || 'forge-dev-secret-key-goals-2026';
+    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const payload = Buffer.from(
+      JSON.stringify({
+        sub: 'usr_expired',
+        email: 'expired@forge.internal',
+        display_name: 'Expired User',
+        roles: ['roles/employee'],
+        exp: Math.floor(Date.now() / 1000) - 600, // Expired 10 minutes ago
+      })
+    ).toString('base64url');
+    const signature = require('node:crypto').createHmac('sha256', JWT_SECRET).update(`${header}.${payload}`).digest('base64url');
+    const token = `${header}.${payload}.${signature}`;
+
+    try {
+      const res = await fetch(`http://localhost:${server.port}/api/boards`, {
+        headers: { Cookie: `forge_session=${token}` },
+      });
+      expect(res.status).toBe(401);
+      const data = await res.json();
+      expect(data.authenticated).toBe(false);
+      expect(data.code).toBe('TOKEN_EXPIRED');
+    } finally {
+      server.stop(true);
+    }
+  });
 });

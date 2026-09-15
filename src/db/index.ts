@@ -284,5 +284,33 @@ export function listUsers() {
   }));
 }
 
+/**
+  * upsertUser
+  * @requirements [LLR-SUB-001]
+  */
+export function upsertUser(user: { id: string; email: string; displayName: string; roles: string[]; department?: string; managerId?: string | null; managerName?: string | null; managerEmail?: string | null }) {
+  const existing = getUserById(user.id);
+  const now = Date.now();
+  const rolesStr = Array.isArray(user.roles) ? user.roles.join(',') : (user.roles || 'roles/employee');
+  const dept = user.department || 'Platform Engineering';
+  const mgrId = user.managerId || null;
+  const mgrName = user.managerName || null;
+  const mgrEmail = user.managerEmail || null;
+
+  if (existing) {
+    goalsDb.run(
+      `UPDATE users SET email = ?, display_name = ?, roles = ?, department = ?, manager_id = ?, manager_name = ?, manager_email = ? WHERE id = ?`,
+      [user.email, user.displayName, rolesStr, dept, mgrId, mgrName, mgrEmail, user.id]
+    );
+  } else {
+    goalsDb.run(
+      `INSERT INTO users (id, email, display_name, roles, department, manager_id, manager_name, manager_email, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [user.id, user.email, user.displayName, rolesStr, dept, mgrId, mgrName, mgrEmail, now]
+    );
+  }
+
+  return getUserById(user.id)!;
+}
+
 // Auto-seed on startup
 seedDefaultData();

@@ -299,32 +299,45 @@ export function authGuard(req: Request, options: AuthGuardOptions = {}): AuthGua
       const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf8');
       const payload = JSON.parse(payloadJson);
 
+      const isApiReq = url.pathname.includes('/api/') || (req.headers.get('accept') || '').includes('application/json');
+
       // Check token expiry
       if (payload.exp && typeof payload.exp === 'number') {
         const now = Math.floor(Date.now() / 1000);
         if (now > payload.exp) {
-          if (isDevMode) {
-            return { authenticated: true, user: defaultDevUser };
-          }
+          const expiredMsg = '401 Unauthorized: Session token expired';
+          const expiredResp = isApiReq
+            ? new Response(JSON.stringify({ error: expiredMsg, authenticated: false, code: 'TOKEN_EXPIRED' }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json' },
+              })
+            : Response.redirect(defaultRedirect, 302);
           return {
             authenticated: false,
-            response: new Response('401 Unauthorized: Session token expired', { status: 401 }),
+            response: expiredResp,
           };
         }
       }
 
       const user: AuthUser = {
-        id: payload.sub || payload.userId || 'usr_dev',
+        id: payload.sub || payload.userId || payload.user_id || 'usr_dev',
         email: payload.email || req.headers.get('x-user-email') || 'jane.doe@forge.internal',
-        displayName: payload.displayName || payload.name || req.headers.get('x-user-name') || 'Jane Doe',
+        displayName: payload.display_name || payload.displayName || payload.name || req.headers.get('x-user-name') || 'Jane Doe',
         roles: Array.isArray(payload.roles) ? payload.roles : ['roles/employee'],
         principalType: payload.principal_type || payload.principalType || 'EMPLOYEE',
         department: payload.department || req.headers.get('x-user-department') || 'Platform Engineering',
-        orgId: payload.orgId || 'org_default',
-        managerId: payload.managerId ?? (req.headers.get('x-user-manager-id') || null),
-        managerName: payload.managerName ?? (req.headers.get('x-user-manager-name') || null),
-        managerEmail: payload.managerEmail ?? (req.headers.get('x-user-manager-email') || null),
+        orgId: payload.org_id || payload.orgId || 'org_default',
+        managerId: payload.manager_id ?? payload.managerId ?? (req.headers.get('x-user-manager-id') || null),
+        managerName: payload.manager_name ?? payload.managerName ?? (req.headers.get('x-user-manager-name') || null),
+        managerEmail: payload.manager_email ?? payload.managerEmail ?? (req.headers.get('x-user-manager-email') || null),
       };
+
+      if (!verifyJwtSignature(parts[0], parts[1], parts[2]) && !isDevMode) {
+        return {
+          authenticated: false,
+          response: new Response('401 Unauthorized: Invalid token signature', { status: 401 }),
+        };
+      }
 
       if (options.requiredRoles && options.requiredRoles.length > 0) {
         const hasRole = options.requiredRoles.some((r) => user.roles.includes(r) || user.roles.includes('roles/super_admin'));
@@ -340,7 +353,7 @@ export function authGuard(req: Request, options: AuthGuardOptions = {}): AuthGua
     }
   } catch {}
 
-  if (isDevMode) {
+  if (isDevMode && !effectiveToken) {
     return { authenticated: true, user: defaultDevUser };
   }
 

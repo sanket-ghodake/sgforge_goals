@@ -1,9 +1,13 @@
 # ==============================================================================
-# Standalone Forge App Compose: App Template (Air-Gapped by Default)
+# Standalone Forge App Compose: Quick-Launch Root Compose (Air-Gapped by Default)
 # Invariant: internal: true -> ZERO outbound internet egress. Inbound via proxy.
-# Usage: docker compose up --build -d
+#
+# USAGE MATRIX (choose ONE at a time to avoid container_name conflicts):
+#   Root (this file)         ./run.sh compose up -d           → container: ag-app-goals-local
+#   Dev  (docker/dev/)       cd docker/dev && docker compose  → container: ag-app-goals-dev
+#   Prod (docker/prod/)      cd docker/prod && docker compose → container: ag-app-goals-prod
 # ==============================================================================
-name: forge-app-goals
+name: forge-app-goals-local
 
 networks:
   # 1. Isolated Application Network (Strict Air-Gap: No default gateway to internet)
@@ -21,7 +25,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    container_name: ${CONTAINER_PREFIX:-ag}-app-goals-dev
+    container_name: ${CONTAINER_PREFIX:-ag}-app-goals-local
     ports:
       - "${PORT:-8090}:${PORT:-8090}"
     env_file:
@@ -39,7 +43,7 @@ services:
       goals-airgap-net:
       forge-gateway-net:
         aliases:
-          - app-goals
+          - app-goals-local
     restart: unless-stopped
     stop_grace_period: 10s
     logging:

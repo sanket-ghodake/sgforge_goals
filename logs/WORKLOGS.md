@@ -34,3 +34,5 @@
 2026-09-15 18:43 | Redesigned Org Impact Directory developer table view with 3 columns, SPA pagination, and RBAC timeline security
 2026-09-15 18:45 | Removed Executive Directory pill badge and adjusted header spacing in Org Impact Directory view
 2026-09-15 19:12 | Fixed GET /api/projects route handler placement, added projects table seeding to seedDefaultData, and reset rework comment form state
+2026-09-15 21:34 | Fix authenticated employee identity resolution and real-time auto logout on token expiration
+2026-09-15 21:48 | Audited Trivy container source (Docker daemon, not toolchain); fixed duplicate container_name conflict in root docker-compose.yml (renamed to ag-app-goals-local, project forge-app-goals-local)
