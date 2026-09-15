@@ -1,0 +1,42 @@
+name: forge-app-goals-prod
+
+networks:
+  goals-airgap-net:
+    driver: bridge
+    internal: true
+
+  forge-gateway-net:
+    name: ${FORGE_APPS_NETWORK:-${CONTAINER_PREFIX:-ag}_forge_apps_net}
+    external: true
+
+services:
+  app-prod:
+    build:
+      context: ../..
+      dockerfile: docker/prod/Dockerfile
+    container_name: ${CONTAINER_PREFIX:-ag}-app-goals-prod
+    ports:
+      - "${PORT:-8090}:${PORT:-8090}"
+    environment:
+      - PORT=${PORT:-8090}
+      - NODE_ENV=production
+    volumes:
+      - ../../data:/app/data
+      - ../../logs:/app/logs
+    networks:
+      goals-airgap-net:
+      forge-gateway-net:
+        aliases:
+          - app-goals
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8090}/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

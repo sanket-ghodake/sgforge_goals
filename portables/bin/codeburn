@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Standalone Portable Wrapper for CodeBurn (AI Token & Spend Tracker)
+# Autonomous Micro-App Submodule - Enterprise Clean Architecture (2026 LTS)
+# ==============================================================================
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Enterprise privacy & telemetry suppression
+export DO_NOT_TRACK=1
+export CODEBURN_TELEMETRY=0
+
+LOCAL_CODEBURN="$APP_ROOT/node_modules/.bin/codeburn"
+PARENT_NODE_MODULES="$APP_ROOT/../../node_modules/.bin/codeburn"
+PORTABLE_BUN="$APP_ROOT/../../portables/bun/bin/bun"
+SYS_CODEBURN="$(which -a codeburn 2>/dev/null | grep -v "portables/bin" | head -n 1 || true)"
+
+if [ -f "$LOCAL_CODEBURN" ] && [ -x "$LOCAL_CODEBURN" ]; then
+    exec "$LOCAL_CODEBURN" "$@"
+elif [ -f "$PARENT_NODE_MODULES" ] && [ -x "$PARENT_NODE_MODULES" ]; then
+    exec "$PARENT_NODE_MODULES" "$@"
+elif [ -n "$SYS_CODEBURN" ] && [ -x "$SYS_CODEBURN" ]; then
+    exec "$SYS_CODEBURN" "$@"
+elif [ -x "$PORTABLE_BUN" ]; then
+    exec "$PORTABLE_BUN" x --bun codeburn "$@"
+elif command -v bun >/dev/null 2>&1; then
+    exec bun x --bun codeburn "$@"
+elif command -v npx >/dev/null 2>&1; then
+    exec npx --yes codeburn "$@"
+else
+    echo "❌ [codeburn] Neither local codeburn, parent portable, bun, nor npx was found." >&2
+    exit 1
+fi

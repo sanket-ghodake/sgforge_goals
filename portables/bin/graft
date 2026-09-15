@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Standalone Portable Wrapper for Graft (Code Context Graph Engine)
+# Autonomous Micro-App Submodule - Enterprise Clean Architecture (2026 LTS)
+# ==============================================================================
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Enterprise telemetry suppression
+export GRAFT_TELEMETRY=0
+export DO_NOT_TRACK=1
+
+LOCAL_GRAFT="$APP_ROOT/node_modules/.bin/graft"
+PARENT_NODE_MODULES="$APP_ROOT/../../node_modules/.bin/graft"
+SYS_GRAFT="$(which -a graft 2>/dev/null | grep -v "portables/bin" | head -n 1 || true)"
+
+if [ -f "$LOCAL_GRAFT" ] && [ -x "$LOCAL_GRAFT" ]; then
+    exec "$LOCAL_GRAFT" "$@"
+elif [ -f "$PARENT_NODE_MODULES" ] && [ -x "$PARENT_NODE_MODULES" ]; then
+    exec "$PARENT_NODE_MODULES" "$@"
+elif [ -n "$SYS_GRAFT" ] && [ -x "$SYS_GRAFT" ]; then
+    exec "$SYS_GRAFT" "$@"
+elif command -v npx >/dev/null 2>&1; then
+    exec npx --yes @nanonets/graft "$@"
+else
+    echo "❌ [graft] Neither local graft, parent node_modules, system graft, nor npx was found." >&2
+    exit 1
+fi

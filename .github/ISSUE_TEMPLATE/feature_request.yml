@@ -1,0 +1,29 @@
+name: "💡 Feature Request"
+description: "Suggest an idea or enhancement for this Forge Micro-App"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: "Thanks for proposing an improvement to this microservice!"
+  - type: input
+    id: summary
+    attributes:
+      label: "Proposal Summary"
+      description: "A concise title for your feature request"
+      placeholder: "e.g. Add streaming SSE endpoint for real-time state updates"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Problem or Need"
+      description: "What problem does this feature solve?"
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: "Proposed Solution"
+      description: "Describe the desired architectural or functional solution"
+    validations:
+      required: true

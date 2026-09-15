@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Standalone Portable Bun Wrapper - Forge Micro-App Submodule (2026 LTS)
+# 3-Tier Resolution: Local Submodule -> Parent Monorepo -> Host System
+# ==============================================================================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+LOCAL_BUN="$APP_ROOT/portables/bun/bin/bun"
+PARENT_BUN="$APP_ROOT/../../portables/bun/bin/bun"
+
+if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ]; then
+    if [ -x "$LOCAL_BUN" ]; then
+        exec "$LOCAL_BUN" "$@"
+    elif [ -x "$PARENT_BUN" ]; then
+        exec "$PARENT_BUN" "$@"
+    fi
+fi
+
+if [ -x "$LOCAL_BUN.exe" ]; then
+    exec "$LOCAL_BUN.exe" "$@"
+elif [ -x "$PARENT_BUN.exe" ]; then
+    exec "$PARENT_BUN.exe" "$@"
+elif command -v bun >/dev/null 2>&1; then
+    exec bun "$@"
+else
+    echo "❌ [Forge App] Bun runtime not found in local portables, parent monorepo, or host PATH." >&2
+    echo "   👉 Run './run.sh setup' to bootstrap the environment or install Bun from https://bun.sh" >&2
+    exit 1
+fi

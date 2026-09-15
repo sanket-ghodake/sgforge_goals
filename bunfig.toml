@@ -1,0 +1,14 @@
+# Bun Configuration File - Forge Micro-App Submodule
+# Documentation: https://bun.sh/docs/runtime/bunfig
+
+[test]
+concurrency = 1
+pathIgnorePatterns = [
+  "**/node_modules/**",
+  "**/portables/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/out/**",
+  "**/.github/**",
+  "**/coverage/**"
+]

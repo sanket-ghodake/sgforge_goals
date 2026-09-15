@@ -1,0 +1,33 @@
+name: Developer Certificate of Origin (DCO 1.1)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  dco:
+    name: "DCO 1.1 Enforcement"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify Signed-off-by Trailers
+        run: |
+          COMMITS=$(git log --no-merges --pretty=format:"%H" origin/${{ github.base_ref }}..HEAD)
+          FAILED=0
+          for COMMIT in $COMMITS; do
+            SIG=$(git log -1 --format="%B" $COMMIT | grep -E "^Signed-off-by: .+ <.+@.+>$" || true)
+            if [ -z "$SIG" ]; then
+              echo "❌ Commit $COMMIT is missing a valid 'Signed-off-by: Author <email>' trailer."
+              FAILED=1
+            else
+              echo "✅ Commit $COMMIT passed DCO 1.1 check."
+            fi
+          done
+          if [ $FAILED -ne 0 ]; then
+            echo "Please sign off your commits using 'git commit --amend -s' and force push."
+            exit 1
+          fi

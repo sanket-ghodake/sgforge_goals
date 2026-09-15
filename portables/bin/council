@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Standalone Portable Wrapper for Council of AI (Multi-Agent Decision Framework)
+# Autonomous Micro-App Submodule - Enterprise Clean Architecture (2026 LTS)
+# Based on framework by Marius Silo (Silotech.xyz)
+# ==============================================================================
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+LOCAL_RUNNER="$APP_ROOT/scripts/council-runner.ts"
+PARENT_RUNNER="$APP_ROOT/../../scripts/council-runner.ts"
+PORTABLE_BUN="$APP_ROOT/../../portables/bun/bin/bun"
+
+if [ -f "$LOCAL_RUNNER" ]; then
+    if [ -x "$PORTABLE_BUN" ]; then
+        exec "$PORTABLE_BUN" run "$LOCAL_RUNNER" "$@"
+    elif command -v bun >/dev/null 2>&1; then
+        exec bun run "$LOCAL_RUNNER" "$@"
+    elif command -v npx >/dev/null 2>&1; then
+        exec npx --yes tsx "$LOCAL_RUNNER" "$@"
+    fi
+elif [ -f "$PARENT_RUNNER" ]; then
+    if [ -x "$PORTABLE_BUN" ]; then
+        exec "$PORTABLE_BUN" run "$PARENT_RUNNER" "$@"
+    elif command -v bun >/dev/null 2>&1; then
+        exec bun run "$PARENT_RUNNER" "$@"
+    elif command -v npx >/dev/null 2>&1; then
+        exec npx --yes tsx "$PARENT_RUNNER" "$@"
+    fi
+fi
+
+echo "❌ [council] Unable to resolve runner: $LOCAL_RUNNER" >&2
+exit 1

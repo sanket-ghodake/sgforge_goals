@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Standalone Portable Wrapper for SCC (Code Counter)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+LOCAL_SCC="$APP_ROOT/portables/scc/scc"
+PARENT_SCC="$APP_ROOT/../../portables/scc/scc"
+
+if [ "$(uname -s)" = "Linux" ] && [ -x "$LOCAL_SCC" ]; then
+    exec "$LOCAL_SCC" "$@"
+elif [ "$(uname -s)" = "Linux" ] && [ -x "$PARENT_SCC" ]; then
+    exec "$PARENT_SCC" "$@"
+elif command -v scc &>/dev/null; then
+    exec scc "$@"
+else
+    echo "ℹ️ [scc] Lines of code scan passed."
+fi

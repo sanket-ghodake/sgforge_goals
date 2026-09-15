@@ -1,0 +1,29 @@
+name: "🐛 Bug Report"
+description: "File a reproducible bug or unexpected microservice behavior"
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: "Thanks for reporting an issue with this Forge Micro-App!"
+  - type: input
+    id: summary
+    attributes:
+      label: "Issue Summary"
+      description: "A clear, one-line summary of the bug"
+      placeholder: "e.g. Health endpoint returns 500 when database WAL is locked"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: "Steps to Reproduce"
+      description: "Exact steps to reproduce the behavior"
+      placeholder: "1. Run './run.sh dev'\n2. Send GET to /health\n3. Observe..."
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: "Relevant Logs or Traces"
+      description: "Paste relevant output from logs/ or server console"
+      render: shell

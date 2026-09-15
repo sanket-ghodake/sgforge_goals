@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Standalone Portable Bunx Wrapper - Forge Micro-App Submodule (2026 LTS)
+# 3-Tier Resolution: Local Submodule -> Parent Monorepo -> Host System
+# ==============================================================================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+LOCAL_BUNX="$APP_ROOT/portables/bun/bin/bunx"
+PARENT_BUNX="$APP_ROOT/../../portables/bun/bin/bunx"
+
+if [ -x "$LOCAL_BUNX" ]; then
+    exec "$LOCAL_BUNX" "$@"
+elif [ -x "$PARENT_BUNX" ]; then
+    exec "$PARENT_BUNX" "$@"
+elif [ -x "$SCRIPT_DIR/bun" ]; then
+    exec "$SCRIPT_DIR/bun" x "$@"
+elif command -v bunx >/dev/null 2>&1; then
+    exec bunx "$@"
+elif command -v bun >/dev/null 2>&1; then
+    exec bun x "$@"
+else
+    echo "❌ [Forge App] Bunx runner not found." >&2
+    exit 1
+fi

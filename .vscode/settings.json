@@ -1,0 +1,13 @@
+{
+  "terminal.integrated.env.linux": {
+    "PATH": "${workspaceFolder}/portables/bin:${workspaceFolder}/../../portables/bin:${workspaceFolder}/../../portables/bun/bin:${env:PATH}"
+  },
+  "terminal.integrated.env.osx": {
+    "PATH": "${workspaceFolder}/portables/bin:${workspaceFolder}/../../portables/bin:${workspaceFolder}/../../portables/bun/bin:${env:PATH}"
+  },
+  "terminal.integrated.env.windows": {
+    "PATH": "${workspaceFolder}\\portables\\bin;${workspaceFolder}\\..\\..\\portables\\bin;${workspaceFolder}\\..\\..\\portables\\bun\\bin;${env:PATH}"
+  },
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "editor.formatOnSave": true
+}

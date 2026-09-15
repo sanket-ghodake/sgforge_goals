@@ -1,0 +1,60 @@
+openapi: 3.1.0
+info:
+  title: Individual Goal Center API
+  version: 1.0.0
+  description: Autonomous microservice API specification with RFC 7807 problem responses.
+servers:
+  - url: /
+    description: Direct or reverse-proxied microservice root
+tags:
+  - name: Health
+    description: Service vitality and database connectivity probes
+  - name: Telemetry
+    description: Structured telemetry and client logging bridge
+paths:
+  /health:
+    get:
+      summary: Microservice Health Probe
+      description: Returns health status, timestamp, uptime, and database connectivity.
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is healthy and database is connected.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: app-goals
+                  timestamp:
+                    type: string
+                    format: date-time
+  /api/logs/browser:
+    post:
+      summary: Browser Telemetry Log Bridge
+      description: Centralized endpoint for reporting client-side errors and warnings.
+      operationId: reportBrowserLog
+      tags:
+        - Telemetry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                severity:
+                  type: string
+                  enum: [info, warn, error]
+                message:
+                  type: string
+      responses:
+        '200':
+          description: Log successfully ingested into structured JSON logs.

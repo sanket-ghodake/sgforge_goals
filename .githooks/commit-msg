@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# SG Forge - Git Commit-Msg Validation Hook (Conventional Commits 1.0 & DCO 1.1)
+# Verifies commit format and Developer Certificate of Origin (Signed-off-by)
+# ==============================================================================
+set -e
+
+MSG_FILE="$1"
+FIRST_LINE=$(head -n 1 "$MSG_FILE")
+
+# 1. Allowed conventional commit types
+REGEX="^(feat|fix|refactor|perf|test|tool|docs|chore|style)(\([a-zA-Z0-9_\-]+\))?: .+"
+
+if ! echo "$FIRST_LINE" | grep -qE "$REGEX"; then
+    echo "❌ [Git Commit-Msg Error] Commit message does not follow Conventional Commits 1.0!"
+    echo "   Format: <type>(<scope>): <short description>"
+    echo "   Types:  feat | fix | refactor | perf | test | tool | docs | chore | style"
+    echo "   Example: feat(portal): add 2D canvas interactive node navigation"
+    exit 1
+fi
+
+# 2. Developer Certificate of Origin (DCO 1.1) Sign-off check
+# Non-blocking warning for local development, enforced on pull requests
+if ! grep -qE "^Signed-off-by: .+ <.+@.+>" "$MSG_FILE"; then
+    echo "ℹ️  [DCO Notice] Commit is missing 'Signed-off-by:' trailer."
+    echo "   For open-source pull requests, certify DCO 1.1 with: git commit -s"
+fi
+
+echo "✅ [Git Commit-Msg] Conventional Commit format validated."

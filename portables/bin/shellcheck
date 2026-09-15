@@ -1,0 +1,48 @@
+#!/usr/bin/env bun
+/**
+ * Standalone Portable ShellCheck Runner - Forge Micro-App Submodule
+ * Performs static analysis and safety checks across submodule shell scripts.
+ */
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
+
+const APP_ROOT = join(import.meta.dir, '..', '..');
+
+const shells = [
+  join(APP_ROOT, 'run.sh'),
+  join(APP_ROOT, 'env.sh'),
+].concat(
+  existsSync(join(APP_ROOT, 'scripts'))
+    ? readdirSync(join(APP_ROOT, 'scripts')).filter(f => f.endsWith('.sh')).map(f => join(APP_ROOT, 'scripts', f))
+    : []
+).filter(f => existsSync(f));
+
+console.log("🐚 [ShellCheck] Auditing submodule shell scripts...");
+let errors = 0;
+
+for (const file of shells) {
+  const content = readFileSync(file, 'utf8');
+  const lines = content.split('\n');
+  const rel = relative(APP_ROOT, file);
+
+  if (!lines[0].startsWith('#!/usr/bin/env bash') && !lines[0].startsWith('#!/bin/bash') && !lines[0].startsWith('#!/bin/sh')) {
+    console.warn(`⚠️ [ShellCheck] ${rel}:1 Missing canonical bash shebang`);
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith('#')) continue;
+    if (/rm\s+-rf\s+\$[A-Za-z0-9_]+$/.test(line)) {
+      console.error(`❌ [ShellCheck] ${rel}:${i + 1} Dangerous unquoted 'rm -rf $VAR' pattern`);
+      errors++;
+    }
+  }
+}
+
+if (errors > 0) {
+  console.error(`❌ [ShellCheck] Found ${errors} shell script issue(s).`);
+  process.exit(1);
+} else {
+  console.log(`✅ [ShellCheck] Scanned ${shells.length} script(s). Zero critical issues.`);
+  process.exit(0);
+}

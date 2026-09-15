@@ -1,0 +1,105 @@
+# AI AGENT DIRECTIVES - INDIVIDUAL GOAL CENTER SUBMODULE (2026 CLEAN ARCHITECTURE)
+
+> ⚠️ **CRITICAL SUBMODULE GOVERNANCE NOTICE FOR ALL AI SESSIONS & LLMs**
+> This repository is an INDEPENDENT, STANDALONE INDIVIDUAL GOAL CENTER SUBMODULE.
+> It can operate, build, test, and be deployed completely autonomously without the main SG Forge monorepo.
+> Every session agent MUST adhere to these inherited rules without exception.
+
+---
+
+## ⚡ 1. PRE-FLIGHT & PRE-COMMIT VERIFICATION GATE (14 CHECKS)
+Before writing code, running commands, or staging changes in this microservice:
+1. [ ] **Command Execution via Submodule Runner**: Prefer `./run.sh test`, `./run.sh dev`, `./run.sh verify`, or prefix with `rtk` if installed.
+2. [ ] **Zero Monorepo Bleed**: All files, code, and dependencies MUST be self-contained within this repository. ZERO relative traversal imports to `../../apps/src/*` or central monorepo folders.
+3. [ ] **500-Line Soft File Cap**: Source files must remain cohesive and **$\le 500$ lines** ($\le 300$ lines ideal).
+4. [ ] **Modern Portable Design System (shadcn + Magic UI + Aceternity + Luxe) & Universal Zero-Browser-Defaults**: User interfaces MUST strictly use the modern self-contained design system fusing shadcn UI (foundations, forms, dialogs, tables), Magic UI (polished animations, micro-interactions, pulse beacons), Aceternity UI (cinematic hero sections, ambient glass cards, spot grids), and Luxe (high-craft developer typography, HUD cards) with 100% dark/light theme parity and 100% vector SVG icons (zero emojis anywhere in UI, tables, toasts, modals, badges, or scripts).
+   - **FULL-WIDTH HEADER & SUB-HEADER SIDEBAR LAYOUT**:
+     - The top header bar MUST span the **entire 100% width of the browser window** at `top: 0`, edge-to-edge (`width: 100%`).
+     - The navigation sidebar MUST start strictly **below the header bar** (`top: 58px; height: calc(100vh - 58px)`).
+     - On mobile viewports ($< 768\text{px}$), the sidebar transitions into an off-canvas drawer controlled via the header's responsive toggle.
+   - **STRICT SINGLE PAGE APPLICATION (SPA) INVARIANT**:
+     - The application MUST strictly operate as a Single Page Application (SPA) with ZERO full-page hard refreshes across navigation, tab transitions, board views, or persona switches.
+     - All internal state transitions use client-side routing (`history.pushState`, `popstate`), dynamic DOM hydration, and instant view swapping.
+   - **RUNTIME VIEWPORT WIDTH ADAPTIVE ENGINE**:
+     - Layouts MUST dynamically adjust at runtime based on container/viewport width: Desktop ($\ge 1024\text{px}$), Tablet ($640\text{px}-1023\text{px}$), and Mobile ($< 640\text{px}$ down to $320\text{px}$) with zero horizontal scrollbar or clipping.
+   - **ZERO BROWSER/OS DEFAULTS (STRICT ENFORCEMENT)**:
+     - **Notifications & Alerts**: Raw browser `alert()`, `confirm()`, `prompt()` are STRICTLY FORBIDDEN. All notifications must use modern Astryx Toast overlays (`window.astryxToast.show/success/error/info`) with glassmorphic cards, slide-in physics, and SVG icons.
+     - **Dropdowns & Selects**: Unstyled native OS `<select>` dropdowns are STRICTLY FORBIDDEN. Must use custom styled selectors with custom SVG chevron arrows (`appearance: none`), themed surface option lists, or custom floating popover menus with smart collision detection (auto-flip/shift/clamp).
+     - **Popups, Modals & Drawers**: Native OS dialogs/popups are STRICTLY FORBIDDEN. Must use glassmorphic blur backdrops (`backdrop-filter: blur(16px)`), smooth scale/zoom animations, vector close buttons, and keyboard escape dismiss.
+     - **Tooltips**: Native browser `title="..."` tooltips are STRICTLY FORBIDDEN. Must use custom floating tooltips (`data-astryx-tooltip` / `getModernTooltipScript()`) with dynamic collision detection (auto-flip up, clamp horizontal).
+     - **Scrollbars**: Native OS/browser scrollbars are STRICTLY FORBIDDEN. Universal slim themed scrollbars (`scrollbar-width: thin`, `::-webkit-scrollbar`) must be active on all scrollable containers.
+     - **Subapp Clean Headers**: Per-subapp headers must maintain clean minimalist aesthetics: zero duplicate API key badges or platform egress buttons in sub-app headers (all navigation handled by breadcrumbs and dedicated views).
+5. [ ] **Dedicated Turso DB Isolation**: Operates exclusively with its own local database in `data/<app>.db` via `getDatabaseClient`. Querying another app's DB or central DBs is strictly forbidden.
+6. [ ] **Autonomous Outbound Network & Egress Security**:
+   - The central platform core is strictly **AIR-GAPPED** (`internal: true`).
+   - This micro-app operates on `forge-apps-net` and is **100% responsible for its own outbound calls** (e.g. external payment APIs, webhooks, LLM APIs).
+   - All outbound calls must enforce timeouts, retries, and strict secret protection (credentials in `.env`, never in code).
+7. [ ] **5-Tier Microservice Test Governance**: Maintain all 5 test tiers in `test/` (`unit/`, `integration/`, `security/`, `contracts/`, `e2e/`). Run via `./run.sh test`.
+8. [ ] **Centralized Logging & RFC 7807 Error Boundaries**: Use local `createLogger` and `createSafeHandler` from `./src/lib/sdk`. Return RFC 7807 problem responses with trace IDs.
+9. [ ] **ABSOLUTE ZERO AUTO-COMMITS (HARD BLOCKED)**: AI agents are STRICTLY FORBIDDEN from running `git commit` unless the user explicitly types `"commit changes"` or `"git commit"` in the CURRENT prompt.
+10. [ ] **Per-Conversation Worklog Auto-Update**: At the end of every task, append strictly ONE line to `logs/WORKLOGS.md` (`YYYY-MM-DD HH:mm | <summary>`) via `./run.sh worklog "<summary>"`.
+11. [ ] **Lifetime Submodule Token Ledger**: Track session tokens and spend in `logs/token-ledger.jsonl` via `./run.sh tokens sync`.
+12. [ ] **Code Context & Dependency Graph (Graft)**: Inspect symbols and signatures via `./run.sh graft skeleton <file>` or `./run.sh graft callers <symbol>` before editing.
+13. [ ] **Context Compression (Headroom)**: Compress large payloads or logs before prompting via `./run.sh headroom compress <file>`.
+14. [ ] **System Traceability & Living Documentation**: Maintain colocated documentation in `docs/` (`docs/hlr/`, `docs/llr/`, `README.md`). All exported functions must carry `@requirements [LLR-...]` TSDoc tags. Local diagrams must use the `diagram-design` standard.
+
+---
+
+## 🛠️ LOCAL TECH STACK & TOOLCHAIN
+- **Runtime**: Bun (portable or local system)
+- **Database**: Local Turso libSQL (`bun:sqlite`) in WAL mode
+- **Container**: Standalone Alpine-based container (`docker/Dockerfile`) with `context: .`
+- **Testing**: Bun Test (`./run.sh test`)
+- **Quality Gate**: Pre-commit quality gate (`./run.sh verify`)
+- **Code Context**: Graft (`./run.sh graft`)
+- **Spend Tracking**: CodeBurn & Lifetime Ledger (`./run.sh tokens`)
+- **Context Compression**: Headroom (`./run.sh headroom`)
+- **Hooks**: Versioned Git hooks in `.githooks/` activated via `./run.sh setup-hooks`
+
+---
+
+## 🧭 LOCAL SUBMODULE STRUCTURE
+```text
+.
+├── .agents/                    # Autonomous AI agent rules & skills
+│   ├── rules/                  # Domain rules (core, security, testing, graft, codeburn, headroom)
+│   └── skills/                 # Tool workflows (graft, codeburn, headroom)
+├── .githooks/                  # Pre-commit gate & post-commit logger
+├── docker/
+│   └── Dockerfile              # Standalone build (context: .)
+├── docker-compose.yml          # Standalone local development compose
+├── logs/
+│   ├── WORKLOGS.md             # Submodule conversation worklog
+│   ├── commits.jsonl           # Ground-truth commit ledger
+│   └── token-ledger.jsonl      # Lifetime token & spend ledger
+├── portables/bin/              # Self-resolving CLI wrappers (rtk, graft, codeburn, headroom)
+├── scripts/
+│   ├── verify-gate.ts          # Standalone 18-check quality gate
+│   ├── log-commit.ts           # Ground-truth commit extractor
+│   ├── sync-ignores.ts         # Ignore synchronization
+│   ├── sync-tokens.ts          # Token ledger synchronizer
+│   ├── display-tokens.ts       # Token dashboard renderer
+│   ├── headroom-runner.ts      # Context compression runner
+│   ├── council-runner.ts       # Council of AI decision runner
+│   └── append-worklog.ts       # Atomic worklog appender
+├── src/
+│   ├── db/                     # Isolated Turso libSQL database instance
+│   ├── lib/                    # Standalone micro-SDK, Astryx UI, and types
+│   └── server.ts               # Microservice HTTP server
+├── test/                       # 5-tier test suites
+├── package.json                # Independent package dependencies
+├── tsconfig.json               # Standalone TypeScript compiler settings
+└── run.sh                      # Unified CLI orchestrator
+```
+
+---
+
+## 🧭 DOMAIN RULE ROUTER
+- **Core Directives**: [`.agents/rules/core.md`](file:///.agents/rules/core.md)
+- **Security & Air-Gap**: [`.agents/rules/security.md`](file:///.agents/rules/security.md)
+- **5-Tier Testing Rigor**: [`.agents/rules/testing.md`](file:///.agents/rules/testing.md)
+- **Code Context Graph (Graft)**: [`.agents/rules/graft.md`](file:///.agents/rules/graft.md)
+- **Lifetime Token Ledger (CodeBurn)**: [`.agents/rules/codeburn.md`](file:///.agents/rules/codeburn.md)
+- **Context Compression (Headroom)**: [`.agents/rules/headroom.md`](file:///.agents/rules/headroom.md)
+- **Council of AI Decision Framework**: [`.agents/rules/council.md`](file:///.agents/rules/council.md)
+- **RTK Token Optimization**: [`.agents/rules/rtk.md`](file:///.agents/rules/rtk.md)

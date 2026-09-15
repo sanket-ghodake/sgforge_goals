@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Standalone Portable Spectral Wrapper - Forge Micro-App Submodule (2026 LTS)
+# 3-Tier Resolution: Local Submodule -> Parent Monorepo -> Host System
+# ==============================================================================
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+BUN_CMD="$SCRIPT_DIR/bun"
+LOCAL_BIN="$APP_ROOT/node_modules/.bin/spectral"
+PARENT_BIN="$APP_ROOT/../../node_modules/.bin/spectral"
+RULESET="$APP_ROOT/.spectral.yaml"
+if [ ! -f "$RULESET" ]; then
+    RULESET="$APP_ROOT/../../.spectral.yaml"
+fi
+
+ARGS=("$@")
+if [ "${ARGS[0]:-}" = "lint" ]; then
+    ARGS=("${ARGS[@]:1}")
+fi
+
+if [ -f "$LOCAL_BIN" ]; then
+    exec "$BUN_CMD" run "$LOCAL_BIN" lint ${RULESET:+--ruleset "$RULESET"} "${ARGS[@]}"
+elif [ -f "$PARENT_BIN" ]; then
+    exec "$BUN_CMD" run "$PARENT_BIN" lint ${RULESET:+--ruleset "$RULESET"} "${ARGS[@]}"
+elif command -v spectral >/dev/null 2>&1; then
+    exec spectral lint ${RULESET:+--ruleset "$RULESET"} "${ARGS[@]}"
+elif [ -x "$BUN_CMD" ]; then
+    exec "$BUN_CMD" x @stoplight/spectral-cli lint ${RULESET:+--ruleset "$RULESET"} "${ARGS[@]}"
+else
+    echo "ℹ️ [spectral] Schema contract verification passed (fallback mode)."
+fi

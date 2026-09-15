@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# SG Forge Submodule - Post-Commit Hook (Read-Only Informational)
+# ZERO file generation in post-commit - all changes are included in pre-commit.
+# ==============================================================================
+set -e
+
+echo "✨ [Submodule Post-Commit] Commit completed cleanly. All logs included in commit."

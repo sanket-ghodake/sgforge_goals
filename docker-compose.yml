@@ -1,0 +1,55 @@
+# ==============================================================================
+# Standalone Forge App Compose: App Template (Air-Gapped by Default)
+# Invariant: internal: true -> ZERO outbound internet egress. Inbound via proxy.
+# Usage: docker compose up --build -d
+# ==============================================================================
+name: forge-app-goals
+
+networks:
+  # 1. Isolated Application Network (Strict Air-Gap: No default gateway to internet)
+  goals-airgap-net:
+    driver: bridge
+    internal: true
+
+  # 2. Reverse-Proxy Gateway Mesh (Inbound routing from Caddy proxy only)
+  forge-gateway-net:
+    name: ${FORGE_APPS_NETWORK:-${CONTAINER_PREFIX:-ag}_forge_apps_net}
+    external: true
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: ${CONTAINER_PREFIX:-ag}-app-goals-dev
+    ports:
+      - "${PORT:-8090}:${PORT:-8090}"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - PORT=${PORT:-8090}
+      - NODE_ENV=${NODE_ENV:-development}
+    command: ["bun", "--watch", "src/server.ts"]
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      goals-airgap-net:
+      forge-gateway-net:
+        aliases:
+          - app-goals
+    restart: unless-stopped
+    stop_grace_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8089}/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

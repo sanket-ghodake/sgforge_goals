@@ -1,0 +1,14 @@
+.git
+.agents
+.githooks
+.github
+node_modules
+test
+logs
+data
+.env
+.env.*
+!.env.example
+/graft
+.codeburn
+.headroom

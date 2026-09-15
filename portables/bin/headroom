@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Standalone Portable Wrapper for Headroom (Context & Prompt Compression Engine)
+# Autonomous Micro-App Submodule - Enterprise Clean Architecture (2026 LTS)
+# ==============================================================================
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Enterprise privacy & telemetry suppression
+export HEADROOM_TELEMETRY=0
+export DO_NOT_TRACK=1
+
+LOCAL_VENV="$APP_ROOT/.venv/bin/headroom"
+LOCAL_RUNNER="$APP_ROOT/scripts/headroom-runner.ts"
+PARENT_RUNNER="$APP_ROOT/../../scripts/headroom-runner.ts"
+PORTABLE_BUN="$APP_ROOT/../../portables/bun/bin/bun"
+SYS_HEADROOM="$(which -a headroom 2>/dev/null | grep -v "$SCRIPT_DIR" | grep -v "forge-apps" | grep -v "portables/bin" | head -n 1 || true)"
+
+if [ -f "$LOCAL_VENV" ] && [ -x "$LOCAL_VENV" ]; then
+    exec "$LOCAL_VENV" "$@"
+elif [ -f "$LOCAL_RUNNER" ]; then
+    if [ -x "$PORTABLE_BUN" ]; then
+        exec "$PORTABLE_BUN" run "$LOCAL_RUNNER" "$@"
+    else
+        exec bun run "$LOCAL_RUNNER" "$@"
+    fi
+elif [ -f "$PARENT_RUNNER" ]; then
+    if [ -x "$PORTABLE_BUN" ]; then
+        exec "$PORTABLE_BUN" run "$PARENT_RUNNER" "$@"
+    else
+        exec bun run "$PARENT_RUNNER" "$@"
+    fi
+elif [ -n "$SYS_HEADROOM" ] && [ -x "$SYS_HEADROOM" ]; then
+    exec "$SYS_HEADROOM" "$@"
+else
+    echo "❌ [headroom] Neither local headroom runner nor system headroom was found." >&2
+    exit 1
+fi

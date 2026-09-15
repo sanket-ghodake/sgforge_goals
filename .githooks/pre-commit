@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# SG Forge Submodule - Pre-Commit Quality Gate & Logger Hook
+# Enforces quality checks, logs commit intent, and stages all logs BEFORE commit.
+# ==============================================================================
+set -e
+
+APP_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# Resolve Bun
+if [ -f "$APP_ROOT/portables/bun/bin/bun" ]; then
+    BUN_BIN="$APP_ROOT/portables/bun/bin/bun"
+elif [ -f "$APP_ROOT/../../portables/bun/bin/bun" ]; then
+    BUN_BIN="$APP_ROOT/../../portables/bun/bin/bun"
+elif command -v bun >/dev/null 2>&1; then
+    BUN_BIN="bun"
+else
+    echo "❌ Error: Bun runtime not found. Aborting commit."
+    exit 1
+fi
+
+echo "⚡ [Submodule Pre-Commit] Running standalone micro-app verification gate..."
+"$BUN_BIN" run "$APP_ROOT/scripts/verify-gate.ts"
+
+# echo "📝 [Submodule Pre-Commit] Recording pre-commit log entries..."
+# "$BUN_BIN" run "$APP_ROOT/scripts/log-commit.ts"
+
+# Include pre-commit generated log artifacts directly in the commit
+git add "$APP_ROOT/logs/WORKLOGS.md" "$APP_ROOT/logs/commits.jsonl" "$APP_ROOT/logs/token-ledger.jsonl" 2>/dev/null || true

@@ -1,0 +1,29 @@
+{
+  "name": "@forge-apps/goals",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/server.ts",
+    "start": "bun src/server.ts",
+    "test": "bun test",
+    "verify": "bun run scripts/verify-gate.ts",
+    "docs:dev": "bun --watch src/server.ts",
+    "docs:coverage": "bun run scripts/verify-gate.ts",
+    "backup": "bun run scripts/backup-db.ts",
+    "compile": "bun build src/server.ts --target=bun --minify --sourcemap=none --outdir dist",
+    "build": "docker build -f docker/Dockerfile -t forge-app-goals .",
+    "docker:dev": "docker compose -f docker/dev/docker-compose.yml up --build -d",
+    "docker:prod": "docker compose -f docker/prod/docker-compose.yml up --build -d",
+    "contracts": "./run.sh contracts",
+    "graft": "./run.sh graft",
+    "tokens": "./run.sh tokens",
+    "council": "./run.sh council"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "license": "Apache-2.0",
+  "author": "Sanket Ghodake <sanketghodke03@gmail.com>"
+}

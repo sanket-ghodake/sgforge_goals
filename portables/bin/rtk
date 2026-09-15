@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+PORTABLE_LOCAL="$APP_ROOT/portables/rtk/bin/rtk"
+PORTABLE_PARENT="$APP_ROOT/../../portables/rtk/bin/rtk"
+HOST_RTK="$HOME/.local/bin/rtk"
+
+if [ -x "$PORTABLE_LOCAL" ]; then
+  exec "$PORTABLE_LOCAL" "$@"
+elif [ -x "$PORTABLE_PARENT" ]; then
+  exec "$PORTABLE_PARENT" "$@"
+elif [ -x "$HOST_RTK" ]; then
+  exec "$HOST_RTK" "$@"
+elif command -v rtk &>/dev/null; then
+  exec rtk "$@"
+else
+  exec "$@"
+fi
