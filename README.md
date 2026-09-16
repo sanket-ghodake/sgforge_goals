@@ -2,6 +2,20 @@
 
 Dedicated isolated microservice submodule operating on internal port `8089` with dedicated Turso libSQL instance.
 
+## ⚡ Quick Start (100% Standalone & Portable)
+
+On any fresh machine or clone, run the zero-install setup entrypoint:
+
+```bash
+bash setup.sh   # or: ./setup.sh
+```
+
+Then start the development server:
+
+```bash
+./run.sh dev
+```
+
 ## 🛠️ Routes & Living Documentation
 - Ingress Path: `/apps/goals`
 - Health Probe: `/apps/goals/health`

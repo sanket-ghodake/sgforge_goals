@@ -17,6 +17,7 @@ build/
 out/
 .cache/
 portables/**/cache/
+portables/bun/
 *.tsbuildinfo
 
 # Submodule Environment & Secrets
@@ -102,8 +103,6 @@ const GIT_ATTRIBUTES_CONTENT = `* text=auto eol=lf
 
 const IGNORE_TARGETS = [
   '.gitignore',
-  '.antigravityignore',
-  '.cursorignore',
   '.copilotignore',
   '.graftignore',
   '.graphifyignore',

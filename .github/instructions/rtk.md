@@ -1,9 +1,4 @@
----
-trigger: always_on
-description: Use rtk commands to conserve token consumption and minimize output overhead in terminal sessions.
----
-
-## rtk
+# RTK Token Optimization
 
 This project has the `rtk` CLI utility installed to optimize LLM token usage and compress terminal outputs.
 

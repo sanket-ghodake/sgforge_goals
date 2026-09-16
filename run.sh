@@ -8,8 +8,11 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
-# Add local portables to PATH if present
-export PATH="$DIR/portables/bin:$DIR/../../portables/bin:$DIR/../../portables/bun/bin:$PATH"
+# Self-heal executable permissions across repository entrypoints
+chmod +x "$DIR/run.sh" "$DIR/setup.sh" "$DIR/env.sh" "$DIR/portables/bin/"* "$DIR/.githooks/"* 2>/dev/null || true
+
+# Prepend local portables to PATH
+export PATH="$DIR/portables/bin:$DIR/portables/bun/bin:$DIR/../../portables/bin:$DIR/../../portables/bun/bin:$PATH"
 
 # Auto-copy .env.example to .env if .env is missing
 if [ ! -f "$DIR/.env" ] && [ -f "$DIR/.env.example" ]; then
@@ -20,31 +23,30 @@ fi
 CMD="${1:-help}"
 shift || true
 
-# Resolve Bun Runtime via 3-tier cascade (with autonomous setup bootstrap)
-if [ -f "$DIR/portables/bun/bin/bun" ]; then
-  BUN_BIN="$DIR/portables/bun/bin/bun"
-elif [ -f "$DIR/../../portables/bun/bin/bun" ]; then
-  BUN_BIN="$DIR/../../portables/bun/bin/bun"
-elif command -v bun >/dev/null 2>&1; then
-  BUN_BIN="bun"
-elif [ "$CMD" = "setup" ]; then
-  echo "📥 Bun runtime not detected on isolated machine. Auto-installing portable Bun..."
-  if command -v curl >/dev/null 2>&1; then
-    mkdir -p "$DIR/portables/bun"
-    curl -fsSL https://bun.sh/install | BUN_INSTALL="$DIR/portables/bun" bash >/dev/null 2>&1 || true
-  fi
-  if [ -f "$DIR/portables/bun/bin/bun" ]; then
+# Strictly resolve Bun Runtime from in-repo portables (zero host reliance)
+ensure_portable_bun() {
+  if [ -x "$DIR/portables/bun/bin/bun" ]; then
     BUN_BIN="$DIR/portables/bun/bin/bun"
-  elif command -v bun >/dev/null 2>&1; then
-    BUN_BIN="bun"
+  elif [ -x "$DIR/../../portables/bun/bin/bun" ]; then
+    BUN_BIN="$DIR/../../portables/bun/bin/bun"
   else
-    echo "❌ Error: Could not auto-install Bun. Please install Bun from https://bun.sh"
-    exit 1
+    echo "📥 In-repo Bun runtime not detected. Auto-bootstrapping portable Bun into ./portables/bun..."
+    mkdir -p "$DIR/portables/bun"
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL https://bun.sh/install | BUN_INSTALL="$DIR/portables/bun" bash >/dev/null 2>&1 || true
+    elif command -v wget >/dev/null 2>&1; then
+      wget -qO- https://bun.sh/install | BUN_INSTALL="$DIR/portables/bun" bash >/dev/null 2>&1 || true
+    fi
+    chmod +x "$DIR/portables/bun/bin/bun" "$DIR/portables/bun/bin/bunx" 2>/dev/null || true
+    if [ -x "$DIR/portables/bun/bin/bun" ]; then
+      BUN_BIN="$DIR/portables/bun/bin/bun"
+    else
+      echo "❌ Error: Could not bootstrap in-repo portable Bun into ./portables/bun" >&2
+      exit 1
+    fi
   fi
-else
-  echo "❌ Error: Bun runtime not found. Run './run.sh setup' to bootstrap or install Bun from https://bun.sh"
-  exit 1
-fi
+}
+ensure_portable_bun
 
 ensure_gateway_network() {
   local net_name="${FORGE_APPS_NETWORK:-${CONTAINER_PREFIX:-ag}_forge_apps_net}"

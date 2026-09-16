@@ -36,3 +36,8 @@
 2026-09-15 19:12 | Fixed GET /api/projects route handler placement, added projects table seeding to seedDefaultData, and reset rework comment form state
 2026-09-15 21:34 | Fix authenticated employee identity resolution and real-time auto logout on token expiration
 2026-09-15 21:48 | Audited Trivy container source (Docker daemon, not toolchain); fixed duplicate container_name conflict in root docker-compose.yml (renamed to ag-app-goals-local, project forge-app-goals-local)
+2026-09-16 06:25 | Configured 100% portable standalone setup with setup.sh entrypoint, git 100755 mode flags, and in-repo portable Bun auto-bootstrap
+2026-09-16 06:28 | Removed CONTRIBUTING.md, LICENSE, NOTICE, and SECURITY.md files and updated verify gate Check 17
+2026-09-16 06:31 | Removed Antigravity, Cursor, and Claude instruction files and updated verify gate Check 10 for GitHub Copilot setup
+2026-09-16 06:33 | Migrated all domain rules, skills, and directives to .github/ (instructions/ and skills/) for GitHub Copilot
+2026-09-16 06:36 | Restored complete master directives, 14 invariants, RTK rules, and portable toolchain rules in .github/copilot-instructions.md

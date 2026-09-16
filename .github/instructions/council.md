@@ -1,9 +1,4 @@
----
-trigger: always_on
-description: Consult Council of AI when reviewing submodule architecture, database schemas, or route changes.
----
-
-## council
+# Council of AI Decision Framework
 
 This submodule integrates the **Council of AI** decision framework (Marius Silo / Silotech.xyz).
 

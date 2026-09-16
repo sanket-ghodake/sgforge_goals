@@ -5,6 +5,7 @@ build/
 out/
 .cache/
 portables/**/cache/
+portables/bun/
 *.tsbuildinfo
 
 # Submodule Environment & Secrets
