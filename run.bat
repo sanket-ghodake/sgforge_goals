@@ -37,7 +37,7 @@ if "%CMD%"=="setup" (
     git config core.hooksPath .githooks 2>nul
     echo 📦 Installing dependencies with Bun...
     "%BUN_BIN%" install
-    "%BUN_BIN%" run scripts\sync-ignores.ts
+    "%BUN_BIN%" run scripts\ops\sync-ignores.ts
     if not exist "%DIR%logs" mkdir "%DIR%logs"
     if not exist "%DIR%logs\WORKLOGS.md" echo # WORKLOGS > "%DIR%logs\WORKLOGS.md"
     if not exist "%DIR%logs\commits.jsonl" type nul > "%DIR%logs\commits.jsonl"
@@ -74,7 +74,7 @@ if "%CMD%"=="reset-db" (
 
 if "%CMD%"=="verify" (
     echo 🛡️ Running pre-commit quality verification gate...
-    "%BUN_BIN%" run scripts\verify-gate.ts
+    "%BUN_BIN%" run scripts\quality\verify-gate.ts
     goto :eof
 )
 
@@ -121,13 +121,13 @@ goto :eof
 
 if "%CMD%"=="complexity" (
     shift
-    "%BUN_BIN%" run scripts\ast-complexity.ts
+    "%BUN_BIN%" run scripts\quality\ast-complexity.ts
     goto :eof
 )
 
 if "%CMD%"=="check-pkg" (
     shift
-    "%BUN_BIN%" run scripts\check-package-health.ts %*
+    "%BUN_BIN%" run scripts\quality\check-package-health.ts %*
     goto :eof
 )
 
@@ -147,7 +147,7 @@ if "%CMD%"=="trivy" (
 )
 
 if "%CMD%"=="sbom" (
-    "%BUN_BIN%" run scripts\generate-sbom.ts %*
+    "%BUN_BIN%" run scripts\quality\generate-sbom.ts %*
     goto :eof
 )
 
@@ -188,7 +188,7 @@ if "%CMD%"=="pack" (
 
 if "%CMD%"=="backup" (
     echo 💾 Running autonomous database backup...
-    "%BUN_BIN%" run scripts\backup-db.ts
+    "%BUN_BIN%" run scripts\ops\backup-db.ts
     goto :eof
 )
 
@@ -262,24 +262,24 @@ if "%CMD%"=="graft" (
 if "%CMD%"=="tokens" (
     set "SUB_CMD=%~2"
     if "!SUB_CMD!"=="sync" (
-        "%BUN_BIN%" run scripts\sync-tokens.ts
+        "%BUN_BIN%" run scripts\ai\sync-tokens.ts
     ) else if "!SUB_CMD!"=="tui" (
         bun x --bun codeburn
     ) else (
-        "%BUN_BIN%" run scripts\display-tokens.ts
+        "%BUN_BIN%" run scripts\ai\display-tokens.ts
     )
     goto :eof
 )
 
 if "%CMD%"=="headroom" (
     shift
-    "%BUN_BIN%" run scripts\headroom-runner.ts %*
+    "%BUN_BIN%" run scripts\ai\headroom-runner.ts %*
     goto :eof
 )
 
 if "%CMD%"=="council" (
     shift
-    "%BUN_BIN%" run scripts\council-runner.ts %*
+    "%BUN_BIN%" run scripts\ai\council-runner.ts %*
     goto :eof
 )
 
@@ -288,7 +288,7 @@ if "%CMD%"=="doc-coverage" goto :do_doc_coverage
 goto :not_doc_coverage
 :do_doc_coverage
 echo 📑 Running Living Documentation & Traceability Gate...
-"%BUN_BIN%" run scripts\verify-gate.ts
+"%BUN_BIN%" run scripts\quality\verify-gate.ts
 goto :eof
 :not_doc_coverage
 
@@ -302,13 +302,13 @@ goto :eof
 :not_docs
 
 if "%CMD%"=="verify-tools" (
-    "%BUN_BIN%" run scripts\verify-all-tools.ts
+    "%BUN_BIN%" run scripts\quality\verify-all-tools.ts
     goto :eof
 )
 
 if "%CMD%"=="worklog" (
     shift
-    "%BUN_BIN%" run scripts\append-worklog.ts %*
+    "%BUN_BIN%" run scripts\ops\append-worklog.ts %*
     goto :eof
 )
 

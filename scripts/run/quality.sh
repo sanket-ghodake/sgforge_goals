@@ -17,7 +17,7 @@ shift || true
 case "$CMD" in
     verify)
         echo "🛡️ [${BRAND_NAME}] Running Autonomous Micro-App Verification Gate (19 Deterministic Checks)..."
-        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/verify-gate.ts" "$@"
+        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/quality/verify-gate.ts" "$@"
         ;;
 
     lint)
@@ -62,7 +62,7 @@ case "$CMD" in
         ;;
 
     check-pkg)
-        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/check-package-health.ts" "$@"
+        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/quality/check-package-health.ts" "$@"
         ;;
 
     licenses)
@@ -93,7 +93,7 @@ case "$CMD" in
         ;;
 
     sbom)
-        exec "$REPO_ROOT/scripts/generate-sbom.sh" "$@"
+        exec "$REPO_ROOT/scripts/quality/generate-sbom.sh" "$@"
         ;;
 
     lhci)
@@ -125,13 +125,13 @@ case "$CMD" in
         shift || true
         case "$SUB_CMD" in
             sync)
-                exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/sync-tokens.ts" "$@"
+                exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/ai/sync-tokens.ts" "$@"
                 ;;
             tui)
                 exec "$REPO_ROOT/portables/bin/codeburn" "$@"
                 ;;
             dashboard|*)
-                exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/display-tokens.ts" "$@"
+                exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/ai/display-tokens.ts" "$@"
                 ;;
         esac
         ;;
@@ -146,7 +146,7 @@ case "$CMD" in
 
     docs:coverage|doc-coverage)
         echo "📑 [${BRAND_NAME}] Running Living Documentation & Traceability Gate..."
-        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/verify-gate.ts" "$@"
+        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/quality/verify-gate.ts" "$@"
         ;;
 
     docs:dev|docs|docs:build)
@@ -158,7 +158,7 @@ case "$CMD" in
         ;;
 
     verify-tools)
-        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/verify-all-tools.ts" "$@"
+        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/quality/verify-all-tools.ts" "$@"
         ;;
 
     *)

@@ -37,7 +37,7 @@ elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && docker 
     exit $_exit
 else
     echo "[Syft Portable] Generating repository SBOM manifest..."
-    if [ -f "$REPO_ROOT/scripts/generate-sbom.sh" ]; then
-        exec "$REPO_ROOT/scripts/generate-sbom.sh"
+    if [ -f "$REPO_ROOT/scripts/quality/generate-sbom.sh" ]; then
+        exec "$REPO_ROOT/scripts/quality/generate-sbom.sh"
     fi
 fi

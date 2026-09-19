@@ -44,3 +44,5 @@
 2026-09-19 16:53 | Aligned run.sh commands and toolchains with org_website_clone
 2026-09-19 16:55 | Enforce zero-telemetry environment variables and complete all command testing
 2026-09-19 16:57 | Committed: feat(cli): align run.sh modular architecture, complete portable toolchains, and isolate Copilot/Antigravity directives (d319ad8)
+2026-09-19 17:07 | Reorganized scripts into clean subdirectories (quality, ai, ops, run) and enforced zero post-commit modifications invariant
+2026-09-19 11:40 | pre-commit: staged 31 files (33 files changed, 121 insertions(+), 53 deletions(-))

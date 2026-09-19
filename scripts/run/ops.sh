@@ -17,13 +17,13 @@ shift || true
 case "$CMD" in
     backup)
         echo "💾 [${BRAND_NAME}] Running isolated database backup snapshot..."
-        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/backup-db.ts" "$@"
+        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/ops/backup-db.ts" "$@"
         ;;
 
     backup-daemon)
         echo "⏰ [${BRAND_NAME}] Starting continuous background hourly backup daemon..."
         while true; do
-            "$PORTABLE_BUN" run "$REPO_ROOT/scripts/backup-db.ts" || true
+            "$PORTABLE_BUN" run "$REPO_ROOT/scripts/ops/backup-db.ts" || true
             echo "💤 Next snapshot in 3600 seconds. Press Ctrl+C to terminate."
             sleep 3600
         done

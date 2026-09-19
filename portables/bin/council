@@ -9,8 +9,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-LOCAL_RUNNER="$APP_ROOT/scripts/council-runner.ts"
-PARENT_RUNNER="$APP_ROOT/../../scripts/council-runner.ts"
+LOCAL_RUNNER="$APP_ROOT/scripts/ai/council-runner.ts"
+PARENT_RUNNER="$APP_ROOT/../../scripts/ai/council-runner.ts"
 PORTABLE_BUN="$APP_ROOT/../../portables/bun/bin/bun"
 
 if [ -f "$LOCAL_RUNNER" ]; then

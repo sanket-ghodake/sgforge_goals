@@ -16,7 +16,7 @@ export TOKSCALE_NO_TELEMETRY=1
 CLEAN_PATH="$(echo "$PATH" | tr ':' '\n' | grep -v "$SCRIPT_DIR" | tr '\n' ':' | sed 's/:$//')"
 
 PORTABLE_BUN="$WORKSPACE_ROOT/portables/bun/bin/bun"
-TOKSCALE_RUNNER="$WORKSPACE_ROOT/scripts/tokscale-runner.ts"
+TOKSCALE_RUNNER="$WORKSPACE_ROOT/scripts/ai/tokscale-runner.ts"
 
 # Resolve Bun runtime
 if [ -x "$PORTABLE_BUN" ]; then

@@ -32,14 +32,21 @@ Before writing code, running commands, or staging changes in this microservice:
 12. [ ] **Permissive License Governance**: Package manifest must declare `"license": "Apache-2.0"`. Zero copyleft (GPL/AGPL) dependencies.
 13. [ ] **Automated CycloneDX 1.5 SBOM**: Continuous SBOM generation via `./run.sh sbom`.
 14. [ ] **System Traceability & Living Documentation**: All exported functions must carry `@requirements [LLR-...]` TSDoc tags matching documents in `docs/llr/`. OpenAPI 3.1 specifications in `docs/api/openapi.yaml`.
-15. [ ] **ABSOLUTE ZERO AUTO-COMMITS (HARD BLOCKED)**: AI agents are STRICTLY FORBIDDEN from running `git commit` unless the user explicitly types `"commit changes"` or `"git commit"` in the CURRENT prompt. At the end of every task, append strictly ONE line to `logs/WORKLOGS.md` via `./run.sh worklog "<summary>"`.
+15. [ ] **ABSOLUTE ZERO AUTO-COMMITS & CLEAN POST-COMMIT INVARIANT (HARD BLOCKED)**:
+    - AI agents are STRICTLY FORBIDDEN from running `git commit` unless the user explicitly types `"commit changes"` or `"git commit"` in the CURRENT prompt.
+    - At the end of every non-commit task, append strictly ONE line to `logs/WORKLOGS.md` via `./run.sh worklog "<summary>"`.
+    - **Zero Post-Commit Modifications**: When committing changes, the worklog (`./run.sh worklog "<summary>"`) MUST be recorded and staged (`git add logs/WORKLOGS.md`) **BEFORE** invoking `git commit`. Absolutely NO files may be created, touched, or modified after `git commit`. After any commit, `git status` MUST show a 100% clean working tree (`nothing to commit, working tree clean`).
 
 ---
 
 ## 🛠️ LOCAL TECH STACK & PORTABLE TOOLCHAIN
 
 - **Runtime**: Portable Bun in `./portables/bun/bin/bun` activated via `./run.sh setup` (zero host reliance)
-- **Modular CLI Runner**: `./run.sh <command>` delegating to `scripts/run/` (`env.sh`, `core.sh`, `docker.sh`, `quality.sh`, `ops.sh`, `help.sh`)
+- **Modular CLI Runner & Clean Scripts Layout**:
+  - Dispatchers: `scripts/run/` (`env.sh`, `core.sh`, `docker.sh`, `quality.sh`, `ops.sh`, `help.sh`)
+  - Quality & Gate: `scripts/quality/` (`verify-gate.ts`, `verify-all-tools.ts`, `ast-complexity.ts`, `check-package-health.ts`, `exec-watchdog.ts`, `generate-sbom.ts`, `generate-sbom.sh`)
+  - AI & Tokens: `scripts/ai/` (`tokscale-runner.ts`, `display-tokens.ts`, `sync-tokens.ts`, `council-runner.ts`, `headroom-runner.ts`)
+  - Production Ops: `scripts/ops/` (`backup-db.ts`, `sync-ignores.ts`, `append-worklog.ts`, `log-commit.ts`)
 - **Database**: Local Turso libSQL (`bun:sqlite`) in WAL mode (`data/goals.db`)
 - **Container**: Standalone Alpine-based container (`docker/Dockerfile`) with `context: .`
 - **Testing**: Bun Test 5-Tier test suites (`./run.sh test`)

@@ -8,7 +8,7 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const APP_ROOT = join(import.meta.dir, '..');
+const APP_ROOT = join(import.meta.dir, '../..');
 
 const IGNORE_PATTERNS = `# Dependencies & Package Managers
 node_modules/

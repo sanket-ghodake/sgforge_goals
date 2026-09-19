@@ -5,4 +5,11 @@
 # ==============================================================================
 set -e
 
-echo "✨ [Submodule Post-Commit] Commit completed cleanly. All logs included in commit."
+DIRTY="$(git status --porcelain 2>/dev/null || true)"
+if [ -n "$DIRTY" ]; then
+    echo "❌ [Submodule Post-Commit Error] Uncommitted changes detected immediately after commit:" >&2
+    echo "$DIRTY" >&2
+    exit 1
+fi
+
+echo "✨ [Submodule Post-Commit] Commit completed cleanly. Working tree is 100% clean."

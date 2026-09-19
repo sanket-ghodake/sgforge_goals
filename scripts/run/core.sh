@@ -48,7 +48,7 @@ case "$CMD" in
             " 2>/dev/null || true
         fi
 
-        "$PORTABLE_BUN" run "$REPO_ROOT/scripts/sync-ignores.ts"
+        "$PORTABLE_BUN" run "$REPO_ROOT/scripts/ops/sync-ignores.ts"
 
         mkdir -p "$REPO_ROOT/logs"
         [ ! -f "$REPO_ROOT/logs/WORKLOGS.md" ] && echo "# WORKLOGS" > "$REPO_ROOT/logs/WORKLOGS.md"
@@ -113,7 +113,7 @@ case "$CMD" in
         ;;
 
     sync-ignores)
-        "$PORTABLE_BUN" run "$REPO_ROOT/scripts/sync-ignores.ts" "$@"
+        "$PORTABLE_BUN" run "$REPO_ROOT/scripts/ops/sync-ignores.ts" "$@"
         ;;
 
     setup-hooks)
@@ -128,7 +128,7 @@ case "$CMD" in
             echo "❌ Usage: ./run.sh worklog <message>" >&2
             exit 1
         fi
-        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/append-worklog.ts" "$*"
+        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/ops/append-worklog.ts" "$*"
         ;;
 
     *)

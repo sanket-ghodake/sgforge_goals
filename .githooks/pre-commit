@@ -22,8 +22,8 @@ fi
 echo "⚡ [Submodule Pre-Commit] Running standalone micro-app verification gate..."
 "$APP_ROOT/run.sh" verify
 
-# echo "📝 [Submodule Pre-Commit] Recording pre-commit log entries..."
-# "$BUN_BIN" run "$APP_ROOT/scripts/log-commit.ts"
+echo "📝 [Submodule Pre-Commit] Recording pre-commit log entries..."
+"$BUN_BIN" run "$APP_ROOT/scripts/ops/log-commit.ts"
 
 # Include pre-commit generated log artifacts directly in the commit
 git add "$APP_ROOT/logs/WORKLOGS.md" "$APP_ROOT/logs/commits.jsonl" "$APP_ROOT/logs/token-ledger.jsonl" 2>/dev/null || true

@@ -29,7 +29,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
-const APP_ROOT = resolve(import.meta.dir, '..');
+const APP_ROOT = resolve(import.meta.dir, '../..');
 
 console.log('🛡️ [SG Forge Submodule Gate] Running 19-Check Autonomous Micro-App Verification Gate...\n');
 

@@ -15,9 +15,9 @@ else
     else
       BUN="$WORKSPACE_ROOT/portables/bun/bin/bun"
       if [ -x "$BUN" ]; then
-        exec "$BUN" run "$WORKSPACE_ROOT/scripts/ast-complexity.ts" "$@"
+        exec "$BUN" run "$WORKSPACE_ROOT/scripts/quality/ast-complexity.ts" "$@"
       else
-        exec bun "$WORKSPACE_ROOT/scripts/ast-complexity.ts" "$@"
+        exec bun "$WORKSPACE_ROOT/scripts/quality/ast-complexity.ts" "$@"
       fi
     fi
   fi
