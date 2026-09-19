@@ -1,226 +1,52 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # SG Forge Submodule - Autonomous Microservice CLI (2026 LTS)
-# 100% Independent: Works standalone or embedded within SG Forge Monorepo
+# 100% Dynamically Configured from .env (Brand, Docker, Ports & Microservices)
+# Clean Architecture Modular Dispatcher (<100 Lines, Zero Host Modifications)
 # ==============================================================================
 set -e
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$DIR"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export REPO_ROOT
 
-# Self-heal executable permissions across repository entrypoints
-chmod +x "$DIR/run.sh" "$DIR/setup.sh" "$DIR/env.sh" "$DIR/portables/bin/"* "$DIR/.githooks/"* 2>/dev/null || true
-
-# Prepend local portables to PATH
-export PATH="$DIR/portables/bin:$DIR/portables/bun/bin:$DIR/../../portables/bin:$DIR/../../portables/bun/bin:$PATH"
-
-# Auto-copy .env.example to .env if .env is missing
-if [ ! -f "$DIR/.env" ] && [ -f "$DIR/.env.example" ]; then
-  echo "ℹ️ Auto-generating .env from .env.example..."
-  cp "$DIR/.env.example" "$DIR/.env"
-fi
+# Source cross-platform environment & portable runtime resolver
+source "$REPO_ROOT/scripts/run/env.sh"
 
 CMD="${1:-help}"
-shift || true
-
-# Strictly resolve Bun Runtime from in-repo portables (zero host reliance)
-ensure_portable_bun() {
-  if [ -x "$DIR/portables/bun/bin/bun" ]; then
-    BUN_BIN="$DIR/portables/bun/bin/bun"
-  elif [ -x "$DIR/../../portables/bun/bin/bun" ]; then
-    BUN_BIN="$DIR/../../portables/bun/bin/bun"
-  else
-    echo "📥 In-repo Bun runtime not detected. Auto-bootstrapping portable Bun into ./portables/bun..."
-    mkdir -p "$DIR/portables/bun"
-    if command -v curl >/dev/null 2>&1; then
-      curl -fsSL https://bun.sh/install | BUN_INSTALL="$DIR/portables/bun" bash >/dev/null 2>&1 || true
-    elif command -v wget >/dev/null 2>&1; then
-      wget -qO- https://bun.sh/install | BUN_INSTALL="$DIR/portables/bun" bash >/dev/null 2>&1 || true
-    fi
-    chmod +x "$DIR/portables/bun/bin/bun" "$DIR/portables/bun/bin/bunx" 2>/dev/null || true
-    if [ -x "$DIR/portables/bun/bin/bun" ]; then
-      BUN_BIN="$DIR/portables/bun/bin/bun"
-    else
-      echo "❌ Error: Could not bootstrap in-repo portable Bun into ./portables/bun" >&2
-      exit 1
-    fi
-  fi
-}
-ensure_portable_bun
-
-ensure_gateway_network() {
-  local net_name="${FORGE_APPS_NETWORK:-${CONTAINER_PREFIX:-ag}_forge_apps_net}"
-  if ! docker network inspect "$net_name" >/dev/null 2>&1; then
-    echo "🌐 Creating standalone gateway network: $net_name..."
-    docker network create "$net_name" >/dev/null 2>&1 || true
-  fi
-}
 
 case "$CMD" in
-  setup)
-    echo "⚡ [Forge App] Bootstrapping autonomous micro-app environment..."
-    if [ ! -f "$DIR/.env" ] && [ -f "$DIR/.env.example" ]; then
-      echo "📄 Provisioning .env from .env.example..."
-      cp "$DIR/.env.example" "$DIR/.env"
-    fi
-    echo "⚓ Hardening script permissions & Git configuration..."
-    chmod +x "$DIR"/run.sh "$DIR"/env.sh "$DIR"/portables/bin/* "$DIR"/.githooks/* 2>/dev/null || true
-    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-      git config core.filemode false
-      git config core.autocrlf false
-      git config core.hooksPath .githooks
-    fi
-    echo "📦 Installing microservice dependencies with Bun..."
-    "$BUN_BIN" install
-    APP_NAME="$(grep -E '^APP_NAME=' "$DIR/.env" 2>/dev/null | cut -d '=' -f2 | tr -d '"' | tr -d "'" || echo 'template')"
-    DB_FILE="$DIR/data/${APP_NAME}.db"
-    if [ ! -f "$DB_FILE" ]; then
-      echo "🌱 Bootstrapping dedicated local Turso DB ($DB_FILE)..."
-      mkdir -p "$DIR/data"
-      "$BUN_BIN" -e "
-        import { Database } from 'bun:sqlite';
-        const db = new Database('$DB_FILE');
-        db.run('PRAGMA journal_mode = WAL;');
-        db.run('PRAGMA foreign_keys = ON;');
-        db.run('CREATE TABLE IF NOT EXISTS ${APP_NAME.replace(/-/g, '_')}_records (id TEXT PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT \"ACTIVE\", created_at INTEGER NOT NULL);');
-        db.close();
-      " 2>/dev/null || true
-    fi
-    "$BUN_BIN" run scripts/sync-ignores.ts
-    mkdir -p "$DIR/logs"
-    [ ! -f "$DIR/logs/WORKLOGS.md" ] && echo "# WORKLOGS" > "$DIR/logs/WORKLOGS.md"
-    [ ! -f "$DIR/logs/commits.jsonl" ] && touch "$DIR/logs/commits.jsonl"
-    [ ! -f "$DIR/logs/token-ledger.jsonl" ] && touch "$DIR/logs/token-ledger.jsonl"
-    echo "✅ Using Bun: $($BUN_BIN --version)"
-    echo "💡 Tips for IDE & Terminal PATH:"
-    echo "   ├─ VS Code / Cursor: Terminal PATH is pre-configured via .vscode/settings.json"
-    echo "   ├─ External Shells:  run 'source env.sh'"
-    echo "   └─ Direct Fallback:  run './portables/bin/rtk <command>'"
-    echo "✨ Setup completed successfully! Run './run.sh dev' to start."
-    ;;
-  dev)
-    echo "🚀 Starting standalone micro-app in watch mode..."
-    exec "$BUN_BIN" --watch src/server.ts "$@"
-    ;;
-  docs:dev|docs)
-    echo "📖 Starting standalone micro-app with Living Documentation Engine..."
-    echo "   ├─ App Interface:   http://localhost:${PORT:-8099}"
-    echo "   ├─ Docs Hub:        http://localhost:${PORT:-8099}/docs"
-    echo "   └─ OpenAPI 3.1:     http://localhost:${PORT:-8099}/docs/api"
-    exec "$BUN_BIN" --watch src/server.ts "$@"
-    ;;
-  docs:coverage|doc-coverage)
-    echo "📑 Running Living Documentation & Traceability Gate..."
-    exec "$BUN_BIN" run scripts/verify-gate.ts "$@"
-    ;;
-  start)
-    echo "⚡ Starting standalone micro-app..."
-    exec "$BUN_BIN" src/server.ts "$@"
-    ;;
-  test)
-    echo "🧪 Running 5-tier microservice tests..."
-    exec "$BUN_BIN" test "$@"
-    ;;
-  verify)
-    echo "🛡️ Running pre-commit quality verification gate..."
-    exec "$BUN_BIN" run scripts/verify-gate.ts "$@"
-    ;;
-  backup)
-    echo "💾 Running autonomous database backup..."
-    exec "$BUN_BIN" run scripts/backup-db.ts "$@"
-    ;;
-  build)
-    echo "🐳 Building standalone Docker image..."
-    exec docker build -f docker/Dockerfile -t "${PWD##*/}" "$@" .
-    ;;
-  compose|docker|up)
-    ensure_gateway_network
-    if [ $# -eq 0 ]; then
-      set -- up -d
-    fi
-    echo "🐳 Running standalone Docker Compose ($*)..."
-    exec docker compose "$@"
-    ;;
-  graft)
-    echo "🧠 Running Graft Code Context Graph..."
-    exec "$DIR/portables/bin/graft" "$@"
-    ;;
-  tokens)
-    SUB_CMD="${1:-dashboard}"
-    shift || true
-    case "$SUB_CMD" in
-      sync)
-        exec "$BUN_BIN" run scripts/sync-tokens.ts "$@"
+    # Help & Documentation
+    help|-h|--help)
+        "$REPO_ROOT/scripts/run/help.sh"
         ;;
-      tui)
-        exec "$DIR/portables/bin/codeburn" "$@"
-        ;;
-      dashboard|*)
-        exec "$BUN_BIN" run scripts/display-tokens.ts "$@"
-        ;;
-    esac
-    ;;
-  headroom)
-    exec "$DIR/portables/bin/headroom" "$@"
-    ;;
-  council)
-    exec "$DIR/portables/bin/council" "$@"
-    ;;
-  worklog)
-    if [ $# -eq 0 ]; then
-      echo "❌ Usage: ./run.sh worklog <message>"
-      exit 1
-    fi
-    exec "$BUN_BIN" run scripts/append-worklog.ts "$*"
-    ;;
-  spectral|contracts)
-    if [ $# -eq 0 ]; then
-      set -- docs/api/openapi.yaml
-    fi
-    exec "$DIR/portables/bin/spectral" lint "$@"
-    ;;
-  doctor)
-    echo "🩺 [Forge App] Running Diagnostics..."
-    echo "1. Bun Runtime:     $($BUN_BIN --version)"
-    echo "2. RTK Tool:        $(rtk --version 2>/dev/null || ./portables/bin/rtk --version 2>/dev/null || echo 'Ready')"
-    echo "3. Dedicated DB:    $(ls -lh data/*.db 2>/dev/null || echo 'Not initialized (run ./run.sh setup)')"
-    echo "4. Git Hooks:       $(git config core.hooksPath || echo 'Not configured')"
-    echo "✅ Diagnostics Completed."
-    ;;
-  clean)
-    echo "🧹 [Forge App] Cleaning caches and temporary build artifacts..."
-    rm -rf .cache dist *.tsbuildinfo
-    echo "✨ Cleaned."
-    ;;
-  setup-hooks)
-    echo "⚓ Configuring Git hooks (.githooks)..."
-    git config core.hooksPath .githooks
-    chmod +x .githooks/* 2>/dev/null || true
-    echo "✅ Git hooks activated! Pre-commit gate will verify tests before committing."
-    ;;
-  help|*)
-    echo "
-SG Forge Autonomous Micro-App Submodule CLI
 
-Usage:
-  ./run.sh setup          Bootstrap environment, permissions, DB, and dependencies
-  ./run.sh dev            Start local server in hot-reload watch mode
-  ./run.sh start          Start server in production mode
-  ./run.sh test           Execute local 5-tier test suites
-  ./run.sh verify         Run quality verification gate (18 checks)
-  ./run.sh backup         Run isolated database snapshot (VACUUM INTO)
-  ./run.sh compose [cmd]  Run standalone docker compose (e.g. up -d, down)
-  ./run.sh build          Build standalone Docker container image
-  ./run.sh graft [cmd]    Run Graft code context graph (skeleton, callers, blast)
-  ./run.sh tokens [cmd]   Display lifetime spend, sync ledger, or launch TUI
-  ./run.sh headroom [cmd] Run Headroom context compression engine
-  ./run.sh council [idea] Run Council of AI multi-agent decision framework
-  ./run.sh contracts      Lint OpenAPI 3.1 contracts via Spectral
-  ./run.sh doctor         Inspect toolchain and database status
-  ./run.sh clean          Clean temporary build caches
-  ./run.sh worklog <msg>  Append task completion to logs/WORKLOGS.md
-  ./run.sh setup-hooks    Activate git hooks (.githooks)
-  ./run.sh help           Show this banner
-"
-    ;;
+    # Core Development, Scaffolding & Testing
+    setup|dev|start|test|reset-db|doctor|clean|sync-ignores|setup-hooks|worklog)
+        "$REPO_ROOT/scripts/run/core.sh" "$@"
+        ;;
+
+    # Docker Stack Lifecycle & Real-Time Ergonomic Aliases
+    docker)
+        shift || true
+        "$REPO_ROOT/scripts/run/docker.sh" "$@"
+        ;;
+    up|down|ps|status|top|ctop|monitor|logs|restart|compose|build|purge|reset-data)
+        "$REPO_ROOT/scripts/run/docker.sh" "$@"
+        ;;
+
+    # Quality Gates, Linters, SAST & Security Toolchain
+    verify|lint|deadcode|secrets|typecheck|shellcheck|semgrep|spectral|contracts|complexity|check-pkg|licenses|vuln|trivy|sbom|lhci|fuzz|schemathesis|loadtest|k6|benchmark|pack|graft|tokens|tokscale|headroom|council|docs:coverage|doc-coverage|docs:dev|docs:build|docs|verify-tools)
+        "$REPO_ROOT/scripts/run/quality.sh" "$@"
+        ;;
+
+    # Production Deployment, Database Snapshots, Hardening & Cryptography
+    deploy-prod|rollback-prod|prod-status|backup|backup-daemon|backup-verify|harden|gen-key)
+        "$REPO_ROOT/scripts/run/ops.sh" "$@"
+        ;;
+
+    *)
+        echo "❌ Unknown command: $CMD" >&2
+        echo "Run './run.sh help' to inspect all available microservice orchestration commands." >&2
+        exit 1
+        ;;
 esac

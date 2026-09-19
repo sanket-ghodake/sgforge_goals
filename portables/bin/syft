@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Standalone Portable Wrapper for Syft (Software Bill of Materials - SBOM)
+# Zero Host Modification - Standalone Binary / Docker / Native Fallback
+#
+# FIX [2026-09-15]: Docker fallback now uses a named container + guaranteed
+# cleanup trap so orphan containers are never left behind when this process
+# is killed mid-run (e.g. by a watchdog timeout).
+# ==============================================================================
+# Do NOT use set -e here; we need the trap to fire even on non-zero exit.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+LOCAL_SYFT="$REPO_ROOT/portables/syft/syft"
+
+CLEAN_PATH="$(echo "$PATH" | tr ':' '\n' | grep -v "portables/bin" | tr '\n' ':' | sed 's/:$//')"
+SYS_SYFT="$(PATH="$CLEAN_PATH" which syft 2>/dev/null || true)"
+if [ -x "$LOCAL_SYFT" ]; then
+    exec "$LOCAL_SYFT" "$@"
+elif [ -n "$SYS_SYFT" ] && [ -x "$SYS_SYFT" ]; then
+    exec "$SYS_SYFT" "$@"
+elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && docker image inspect anchore/syft:latest >/dev/null 2>&1; then
+    _CID="syft-sbom-$$"
+    _cleanup() { docker rm -f "$_CID" >/dev/null 2>&1 || true; }
+    trap _cleanup EXIT INT TERM
+
+    docker run \
+        --name "$_CID" \
+        --pull=never \
+        -v "$REPO_ROOT:/src" \
+        -w /src \
+        anchore/syft:latest \
+        "$@"
+    _exit=$?
+    _cleanup
+    trap - EXIT INT TERM
+    exit $_exit
+else
+    echo "[Syft Portable] Generating repository SBOM manifest..."
+    if [ -f "$REPO_ROOT/scripts/generate-sbom.sh" ]; then
+        exec "$REPO_ROOT/scripts/generate-sbom.sh"
+    fi
+fi

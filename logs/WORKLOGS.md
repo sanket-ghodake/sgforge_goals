@@ -41,3 +41,6 @@
 2026-09-16 06:31 | Removed Antigravity, Cursor, and Claude instruction files and updated verify gate Check 10 for GitHub Copilot setup
 2026-09-16 06:33 | Migrated all domain rules, skills, and directives to .github/ (instructions/ and skills/) for GitHub Copilot
 2026-09-16 06:36 | Restored complete master directives, 14 invariants, RTK rules, and portable toolchain rules in .github/copilot-instructions.md
+2026-09-19 16:53 | Aligned run.sh commands and toolchains with org_website_clone
+2026-09-19 16:55 | Enforce zero-telemetry environment variables and complete all command testing
+2026-09-19 16:57 | Committed: feat(cli): align run.sh modular architecture, complete portable toolchains, and isolate Copilot/Antigravity directives (d319ad8)

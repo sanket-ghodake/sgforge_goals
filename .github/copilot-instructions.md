@@ -42,6 +42,7 @@ Before writing code, running commands, or staging changes in this microservice:
 12. [ ] **Code Context & Dependency Graph (Graft)**: Inspect symbols and signatures via `rtk ./run.sh graft skeleton <file>` or `rtk ./run.sh graft callers <symbol>` before editing.
 13. [ ] **Context Compression (Headroom)**: Compress large payloads or logs before prompting via `rtk ./run.sh headroom compress <file>`.
 14. [ ] **System Traceability & Living Documentation**: Maintain colocated documentation in `docs/` (`docs/hlr/`, `docs/llr/`, `README.md`). All exported functions must carry `@requirements [LLR-...]` TSDoc tags. Local diagrams must use the `diagram-design` standard.
+15. [ ] **Named Container & Guaranteed Trap Invariant (Zero Orphan Containers/Volumes)**: Any script, tool wrapper, test, or process invoking Docker MUST strictly use a deterministic container name (`--name "<tool>-<purpose>-$$"`) and register an active cleanup trap (`trap 'docker rm -f "$_CID" >/dev/null 2>&1 || true' EXIT INT TERM`). Never run anonymous ad-hoc `docker run` commands that leave dangling containers or orphan volumes upon unexpected exit or timeout.
 
 ---
 

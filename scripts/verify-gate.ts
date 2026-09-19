@@ -191,13 +191,25 @@ if (existsSync(serverPath)) {
 }
 
 // --------------------------------------------------------------------------
-// Check 10: GitHub Copilot Instructions Compliance
+// Check 10: GitHub Copilot & Antigravity Directives & Foreign IDE Isolation
 // --------------------------------------------------------------------------
 const copilotInstructionsPath = join(APP_ROOT, '.github', 'copilot-instructions.md');
+const agentsPath = join(APP_ROOT, 'AGENTS.md');
+const geminiPath = join(APP_ROOT, 'GEMINI.md');
+const antigravityIgnorePath = join(APP_ROOT, '.antigravityignore');
+const vscodeDir = join(APP_ROOT, '.vscode');
+const cursorDir = join(APP_ROOT, '.cursor');
+
 if (!existsSync(copilotInstructionsPath)) {
-  failGate('10', 'GitHub Copilot Setup', '.github/copilot-instructions.md missing.');
+  failGate('10', 'AI Directives Compliance', '.github/copilot-instructions.md missing.');
+} else if (!existsSync(agentsPath) || !existsSync(geminiPath)) {
+  failGate('10', 'AI Directives Compliance', 'AGENTS.md or GEMINI.md missing.');
+} else if (!existsSync(antigravityIgnorePath)) {
+  failGate('10', 'AI Directives Compliance', '.antigravityignore missing.');
+} else if (existsSync(vscodeDir) || existsSync(cursorDir)) {
+  failGate('10', 'AI Directives Compliance', 'Foreign IDE directories (.vscode or .cursor) detected.');
 } else {
-  passGate('10', 'GitHub Copilot Setup', 'GitHub Copilot setup verified (.github/copilot-instructions.md present).');
+  passGate('10', 'AI Directives Compliance', 'GitHub Copilot and Antigravity directives verified. Zero foreign IDE files.');
 }
 
 // --------------------------------------------------------------------------

@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Standalone Portable Wrapper for Tokscale (AI Token & Spend Analytics Engine)
+# Zero Host Modification - Enterprise Clean Architecture (2026 LTS)
+# ==============================================================================
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Enterprise privacy & telemetry suppression
+export DO_NOT_TRACK=1
+export TOKSCALE_NO_TELEMETRY=1
+
+# Sanitize PATH to prevent self-recursive execution of portables/bin/tokscale
+CLEAN_PATH="$(echo "$PATH" | tr ':' '\n' | grep -v "$SCRIPT_DIR" | tr '\n' ':' | sed 's/:$//')"
+
+PORTABLE_BUN="$WORKSPACE_ROOT/portables/bun/bin/bun"
+TOKSCALE_RUNNER="$WORKSPACE_ROOT/scripts/tokscale-runner.ts"
+
+# Resolve Bun runtime
+if [ -x "$PORTABLE_BUN" ]; then
+    BUN_EXEC="$PORTABLE_BUN"
+elif command -v bun >/dev/null 2>&1; then
+    BUN_EXEC="bun"
+else
+    echo "❌ [tokscale] Portable Bun runtime not found at $PORTABLE_BUN" >&2
+    exit 1
+fi
+
+CMD="${1:-}"
+
+# Route commands
+case "$CMD" in
+    tui)
+        shift || true
+        PATH="$CLEAN_PATH" exec "$BUN_EXEC" x @tokscale/cli tui "$@"
+        ;;
+    clients)
+        shift || true
+        PATH="$CLEAN_PATH" exec "$BUN_EXEC" x @tokscale/cli clients "$@"
+        ;;
+    --version|-V)
+        PATH="$CLEAN_PATH" exec "$BUN_EXEC" x @tokscale/cli --version
+        ;;
+    --help|-h)
+        if [ -f "$TOKSCALE_RUNNER" ]; then
+            exec "$BUN_EXEC" run "$TOKSCALE_RUNNER" --help
+        else
+            PATH="$CLEAN_PATH" exec "$BUN_EXEC" x @tokscale/cli --help
+        fi
+        ;;
+    *)
+        if [ -f "$TOKSCALE_RUNNER" ]; then
+            exec "$BUN_EXEC" run "$TOKSCALE_RUNNER" "$@"
+        else
+            PATH="$CLEAN_PATH" exec "$BUN_EXEC" x @tokscale/cli --light "$@"
+        fi
+        ;;
+esac

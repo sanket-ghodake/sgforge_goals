@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Standalone Portable Wrapper for Hyperfine (Benchmarking Tool)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+HYPERFINE_BIN="$WORKSPACE_ROOT/portables/hyperfine/hyperfine"
+
+# On Linux, execute portable ELF binary. On macOS or other OS, fall through to system hyperfine.
+if [ "$(uname -s)" = "Linux" ] && [ -x "$HYPERFINE_BIN" ]; then
+  exec "$HYPERFINE_BIN" "$@"
+elif command -v hyperfine &>/dev/null; then
+  exec hyperfine "$@"
+else
+  echo "Error: Portable hyperfine executable not found at $HYPERFINE_BIN and system hyperfine not available." >&2
+  exit 1
+fi

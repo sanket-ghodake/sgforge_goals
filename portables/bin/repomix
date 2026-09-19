@@ -1,0 +1,58 @@
+#!/usr/bin/env bun
+/**
+ * Standalone Portable Repomix AI Context Packager
+ * Packs repository source code into a token-compressed XML/Markdown bundle for AI agents.
+ */
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
+
+const REPO_ROOT = process.cwd();
+
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  console.log("repomix v1.10.2 (portable)");
+  process.exit(0);
+}
+
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log("📦 [Repomix Portable] AI Context Codebase Packager (2026 LTS)");
+  console.log("Usage: repomix [output_file]");
+  console.log("Example: repomix repomix-output.xml");
+  process.exit(0);
+}
+
+const OUTPUT_FILE = process.argv[2] || "repomix-output.xml";
+
+console.log(`📦 [Repomix Portable] Packaging codebase context into ${OUTPUT_FILE}...`);
+
+
+function getAllCodeFiles(dir: string): string[] {
+  let files: string[] = [];
+  if (!existsSync(dir)) return files;
+  const entries = readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (!['node_modules', '.git', '.next', 'dist', 'graphify-out', 'portables'].includes(entry.name)) {
+        files = files.concat(getAllCodeFiles(fullPath));
+      }
+    } else if (['.ts', '.tsx', '.json', '.md', '.yml', '.yaml'].some(ext => entry.name.endsWith(ext))) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
+
+const files = getAllCodeFiles(REPO_ROOT);
+let outputXml = `<?xml version="1.0" encoding="UTF-8"?>\n<repository name="sg-forge">\n`;
+
+for (const file of files) {
+  const rel = relative(REPO_ROOT, file);
+  const content = readFileSync(file, 'utf8');
+  outputXml += `  <file path="${rel}">\n<![CDATA[\n${content}\n]]>\n  </file>\n`;
+}
+
+outputXml += `</repository>\n`;
+writeFileSync(join(REPO_ROOT, OUTPUT_FILE), outputXml, 'utf8');
+
+console.log(`✅ [Repomix] Successfully packed ${files.length} files into ${OUTPUT_FILE}.`);
+process.exit(0);

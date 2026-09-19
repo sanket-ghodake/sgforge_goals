@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Standalone Forge Micro-App - Ignore & Git Attributes Synchronization Script (2026 LTS)
- * Ensures consistency across .gitignore, .dockerignore, .antigravityignore, .cursorignore,
+ * Ensures consistency across .gitignore, .dockerignore, .antigravityignore,
  * .copilotignore, .graftignore, .graphifyignore, .repomixignore, and .gitattributes.
  */
 
@@ -103,6 +103,7 @@ const GIT_ATTRIBUTES_CONTENT = `* text=auto eol=lf
 
 const IGNORE_TARGETS = [
   '.gitignore',
+  '.antigravityignore',
   '.copilotignore',
   '.graftignore',
   '.graphifyignore',

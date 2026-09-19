@@ -1,13 +1,24 @@
 #!/usr/bin/env bash
-# Standalone Portable Wrapper for Lizard Complexity Scanner
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-
-PARENT_LIZARD="$APP_ROOT/../../portables/bin/lizard"
-if [ -x "$PARENT_LIZARD" ]; then
-    exec "$PARENT_LIZARD" "$@"
-elif command -v lizard >/dev/null 2>&1; then
-    exec lizard "$@"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+VENV_LIZARD="$WORKSPACE_ROOT/.venv/bin/lizard"
+if [ -x "$VENV_LIZARD" ]; then
+  exec "$VENV_LIZARD" "$@"
 else
-    echo "ℹ️ [Lizard] Complexity check passed (clean modular structure verified)."
+  PYTHON="$WORKSPACE_ROOT/.venv/bin/python3"
+  if [ -x "$PYTHON" ]; then
+    exec "$PYTHON" -m lizard "$@"
+  else
+    SYS_LIZARD="$(which -a lizard 2>/dev/null | grep -v "portables/bin" | head -n 1 || true)"
+    if [ -n "$SYS_LIZARD" ] && [ -x "$SYS_LIZARD" ]; then
+      exec "$SYS_LIZARD" "$@"
+    else
+      BUN="$WORKSPACE_ROOT/portables/bun/bin/bun"
+      if [ -x "$BUN" ]; then
+        exec "$BUN" run "$WORKSPACE_ROOT/scripts/ast-complexity.ts" "$@"
+      else
+        exec bun "$WORKSPACE_ROOT/scripts/ast-complexity.ts" "$@"
+      fi
+    fi
+  fi
 fi

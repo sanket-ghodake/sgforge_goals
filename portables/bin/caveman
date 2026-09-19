@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+BUN_BIN="$WORKSPACE_ROOT/portables/bun/bin/bun"
+CAVEMAN_TS="$WORKSPACE_ROOT/portables/caveman/bin/caveman.ts"
+[ ! -x "$BUN_BIN" ] && BUN_BIN="bun"
+exec "$BUN_BIN" run "$CAVEMAN_TS" "$@"

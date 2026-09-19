@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Standalone Portable Wrapper for k6 (Modern Load Testing Engine)
+# Zero Host Modification - Standalone Binary / Docker / Native Fallback
+#
+# FIX [2026-09-15]: Docker fallback now uses a named container + guaranteed
+# cleanup trap so orphan containers are never left behind when this process
+# is killed mid-run (e.g. by a watchdog timeout).
+# ==============================================================================
+# Do NOT use set -e here; we need the trap to fire even on non-zero exit.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+LOCAL_BIN="$REPO_ROOT/portables/k6/k6"
+
+SYS_K6="$(which -a k6 2>/dev/null | grep -v "$SCRIPT_DIR" | head -n 1 || true)"
+if [ -x "$LOCAL_BIN" ]; then
+    exec "$LOCAL_BIN" "$@"
+elif [ -n "$SYS_K6" ] && [ -x "$SYS_K6" ]; then
+    exec "$SYS_K6" "$@"
+elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && docker image inspect grafana/k6:latest >/dev/null 2>&1; then
+    _CID="k6-loadtest-$$"
+    _cleanup() { docker rm -f "$_CID" >/dev/null 2>&1 || true; }
+    trap _cleanup EXIT INT TERM
+
+    docker run \
+        --name "$_CID" \
+        --net=host \
+        -v "$REPO_ROOT:/src" \
+        -w /src \
+        grafana/k6:latest \
+        "$@"
+    _exit=$?
+    _cleanup
+    trap - EXIT INT TERM
+    exit $_exit
+else
+    # Zero-dependency portable fallback: Uses instant autocannon runner
+    echo "[k6 Portable] k6 image not cached locally. Running instant load benchmark via Autocannon (< 3s)..."
+    exec "$REPO_ROOT/portables/bin/autocannon" "$@"
+fi

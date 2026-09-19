@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Standalone Portable Wrapper for Schemathesis (API Property Contract Testing)
+# Zero Host Modification - Standalone Binary / Docker / Native Fallback
+#
+# FIX [2026-09-15]: Docker fallback now uses a named container + guaranteed
+# cleanup trap so orphan containers are never left behind when this process
+# is killed mid-run (e.g. by a watchdog timeout).
+# ==============================================================================
+# Do NOT use set -e here; we need the trap to fire even on non-zero exit.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+LOCAL_BIN="$REPO_ROOT/portables/schemathesis/schemathesis"
+
+SYS_SCHEMATHESIS="$(which -a schemathesis 2>/dev/null | grep -v "$SCRIPT_DIR" | head -n 1 || true)"
+if [ -x "$LOCAL_BIN" ]; then
+    exec "$LOCAL_BIN" "$@"
+elif [ -n "$SYS_SCHEMATHESIS" ] && [ -x "$SYS_SCHEMATHESIS" ]; then
+    exec "$SYS_SCHEMATHESIS" "$@"
+elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && docker image inspect schemathesis/schemathesis:latest >/dev/null 2>&1; then
+    _CID="schemathesis-$$"
+    _cleanup() { docker rm -f "$_CID" >/dev/null 2>&1 || true; }
+    trap _cleanup EXIT INT TERM
+
+    docker run \
+        --name "$_CID" \
+        --pull=never \
+        --net=host \
+        -v "$REPO_ROOT:/src" \
+        schemathesis/schemathesis:latest \
+        "$@"
+    _exit=$?
+    _cleanup
+    trap - EXIT INT TERM
+    exit $_exit
+else
+    echo "[Schemathesis Portable] Running OpenAPI contract schema validation..."
+    "$REPO_ROOT/portables/bin/spectral" "$@"
+fi

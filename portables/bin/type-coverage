@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Standalone Portable Wrapper for Type Coverage Auditor (TypeScript Strictness)
+# Zero Host Modification - Uses Repo-Local Portable Toolchain
+# ==============================================================================
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+BUN="bun"
+if [ -x "$REPO_ROOT/portables/bun/bin/bun" ]; then
+    BUN="$REPO_ROOT/portables/bun/bin/bun"
+elif command -v bun >/dev/null 2>&1; then
+    BUN="bun"
+fi
+LOCAL_BIN="$REPO_ROOT/node_modules/.bin/type-coverage"
+
+if [ -f "$LOCAL_BIN" ]; then
+    exec "$BUN" run "$LOCAL_BIN" --at-least 90 "$@"
+else
+    SYS_TC="$(which -a type-coverage 2>/dev/null | grep -v "$SCRIPT_DIR" | head -n 1 || true)"
+    if [ -n "$SYS_TC" ] && [ -x "$SYS_TC" ]; then
+        exec "$SYS_TC" --at-least 90 "$@"
+    else
+        echo "❌ [type-coverage] Local binary not found at $LOCAL_BIN. Run './run.sh setup' to install." >&2
+        exit 1
+    fi
+fi

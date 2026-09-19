@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Standalone Portable Wrapper for ctop (Container Top Terminal Dashboard)
+# Zero Host Modification - Standalone Binary / Docker / Native Fallback
+# ==============================================================================
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+LOCAL_BIN="$REPO_ROOT/portables/ctop/ctop"
+
+# On Linux x86_64, execute portable ELF binary. On macOS or other OS, fall through to system ctop or docker stats.
+if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ] && [ -x "$LOCAL_BIN" ]; then
+    if [ ! -t 0 ] || [ ! -t 1 ] || [ "$TERM" = "dumb" ] || [ -z "$TERM" ]; then
+        if [ "$1" = "-v" ] || [ "$1" = "--version" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+            exec "$LOCAL_BIN" "$@"
+        fi
+        echo "📊 [ctop] Headless or non-TTY terminal detected. Streaming live container stats:"
+        exec docker stats --no-stream
+    fi
+    exec "$LOCAL_BIN" "$@"
+else
+    SYS_CTOP="$(which -a ctop 2>/dev/null | grep -v "$SCRIPT_DIR" | head -n 1 || true)"
+    if [ -n "$SYS_CTOP" ] && [ -x "$SYS_CTOP" ]; then
+        exec "$SYS_CTOP" "$@"
+    elif command -v docker >/dev/null 2>&1; then
+        echo "📊 [ctop Portable] Monitoring containers via Docker stats..."
+        exec docker stats
+    else
+        echo "❌ Docker or ctop not available for container metrics." >&2
+        exit 1
+    fi
+fi
+

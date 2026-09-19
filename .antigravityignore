@@ -1,0 +1,52 @@
+# Dependencies & Package Managers
+node_modules/
+dist/
+build/
+out/
+.cache/
+portables/**/cache/
+portables/bun/
+*.tsbuildinfo
+
+# Submodule Environment & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Submodule Local Database & Transients
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.sqlite
+data/*.sqlite3
+backups/db/*
+!backups/db/README.md
+
+# Submodule Local Logs (transient logs ignored; ledgers and worklogs tracked)
+logs/*.log
+logs/*.jsonl.bak
+logs/token-ledger-backup.jsonl
+logs/council/
+logs/security/
+logs/reports/
+.agents/reports/
+
+# AI Context, Token & Compression Tooling
+.graftignore
+/graft/
+.codeburn/
+codeburn-*.json
+.headroom/
+headroom-*.json
+graphify-out/cache/
+graphify-out/.graphify_*
+repomix-output.xml
+
+# Operating System & IDE Transients
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
