@@ -6,23 +6,28 @@
 
 import { describe, expect, it } from 'bun:test';
 import { createBoard, createProjectRecord, getBoardById, submitBoard, updateGoalItems } from '../../src/backend/services/board-service';
-import { approveBoard, requestRework } from '../../src/backend/services/review-service';
+import { approveBoard, requestRework, addReviewComment, unlockBoard, requestBoardUnlock } from '../../src/backend/services/review-service';
+import { listUserReminders } from '../../src/backend/services/reminder-service';
 import type { AuthUser } from '../../src/lib/types';
 
 describe('Tier 1 Unit: Goal Board State Machine & Lock Lifecycle', () => {
-  const testUser: AuthUser = {
-    id: `usr_tester_${Date.now()}`,
-    email: 'tester@forge.internal',
-    displayName: 'Test Engineer',
-    roles: ['roles/employee'],
-    orgId: 'org_test_unit',
-  };
-
   const managerUser: AuthUser = {
     id: 'usr_manager_unit',
     email: 'lead@forge.internal',
     displayName: 'Team Lead',
     roles: ['roles/manager'],
+    department: 'Engineering',
+    orgId: 'org_test_unit',
+  };
+
+  const testUser: AuthUser = {
+    id: `usr_tester_${Date.now()}`,
+    email: 'tester@forge.internal',
+    displayName: 'Test Engineer',
+    roles: ['roles/employee'],
+    department: 'Engineering',
+    managerId: managerUser.id,
+    managerName: managerUser.displayName,
     orgId: 'org_test_unit',
   };
 
@@ -206,4 +211,146 @@ describe('Tier 1 Unit: Goal Board State Machine & Lock Lifecycle', () => {
     const comments = refreshed.comments || [];
     expect(comments.some(c => c.commentText.includes('routed for Admin review') || c.commentText.includes('no assigned manager'))).toBeTrue();
   });
+
+  it('Arrange, Act, Assert: strictly blocks self-approval and self-rework (Segregation of Duties)', () => {
+    // Arrange: Manager creates their own board
+    const ownBoard = createBoard({
+      projectId: testProject.id,
+      title: 'Manager Own Board',
+      cycle: '2026-Q1',
+    }, managerUser);
+
+    updateGoalItems(ownBoard.id, {
+      items: [{
+        title: 'Manager Goal 1',
+        description: 'Self-owned goal',
+        category: 'DELIVERABLE',
+        targetDate: '2026-03-31',
+        weight: 100,
+        progressPercent: 0,
+        status: 'PENDING',
+      }],
+    }, managerUser);
+
+    submitBoard(ownBoard.id, managerUser);
+
+    // Act & Assert: Manager attempts to approve their own board -> must throw ForbiddenError
+    expect(() => approveBoard(ownBoard.id, managerUser, 'Self approval attempt')).toThrow(/Segregation of Duties Violation/);
+
+    // Act & Assert: Manager attempts to request rework on their own board -> must throw ForbiddenError
+    expect(() => requestRework(ownBoard.id, managerUser, 'Self rework attempt')).toThrow(/Segregation of Duties Violation/);
+  });
+
+  it('Arrange, Act, Assert: blocks unauthorized third-party manager from reviewing board outside chain', () => {
+    // Arrange: Board owned by testUser with assigned managerUser
+    const directBoard = createBoard({
+      projectId: testProject.id,
+      title: 'Direct Report Plan',
+      cycle: '2026-Q1',
+    }, testUser);
+
+    updateGoalItems(directBoard.id, {
+      items: [{
+        title: 'Target Deliverable',
+        description: 'Scoped to team',
+        category: 'DELIVERABLE',
+        targetDate: '2026-03-31',
+        weight: 100,
+        progressPercent: 0,
+        status: 'PENDING',
+      }],
+    }, testUser);
+
+    submitBoard(directBoard.id, testUser);
+
+    // Third-party manager outside reporting chain and different department
+    const intruderManager: AuthUser = {
+      id: 'usr_intruder_mgr',
+      email: 'outsider@forge.internal',
+      displayName: 'Outsider Lead',
+      roles: ['roles/manager'],
+      department: 'Marketing',
+      orgId: 'org_test_unit',
+    };
+
+    // Act & Assert: Intruder attempts to approve or rework
+    expect(() => approveBoard(directBoard.id, intruderManager, 'Intruder approval')).toThrow(/not authorized to review/);
+    expect(() => requestRework(directBoard.id, intruderManager, 'Intruder rework')).toThrow(/not authorized to review/);
+  });
+
+  it('Arrange, Act, Assert: creates real notifications and persists comments on feedback, rework, and approval', () => {
+    const board = createBoard({
+      projectId: testProject.id,
+      title: 'Notification Test Plan',
+      cycle: '2026-Q1',
+    }, testUser);
+
+    updateGoalItems(board.id, {
+      items: [{
+        title: 'Initial Deliverable',
+        description: 'First draft',
+        category: 'DELIVERABLE',
+        targetDate: '2026-03-31',
+        weight: 100,
+        progressPercent: 0,
+        status: 'PENDING',
+      }],
+    }, testUser);
+
+    submitBoard(board.id, testUser);
+
+    // Contributor sends a chat comment -> notification goes to manager
+    addReviewComment(board.id, testUser, 'Please review milestone #1 specifications.');
+    const managerReminders = listUserReminders(managerUser.id, 'org_test_unit');
+    expect(managerReminders.some(r => r.type === 'FEEDBACK_RECEIVED')).toBeTrue();
+
+    // Manager approves board -> notification goes to contributor
+    approveBoard(board.id, managerUser, 'Approved with excellence.');
+    const contributorReminders = listUserReminders(testUser.id, 'org_test_unit');
+    expect(contributorReminders.some(r => r.type === 'BOARD_APPROVED')).toBeTrue();
+
+    // Manager unlocks board -> notification goes to contributor
+    unlockBoard(board.id, managerUser, 'Unlocked for Q2 stretch additions');
+    const updatedContributorReminders = listUserReminders(testUser.id, 'org_test_unit');
+    expect(updatedContributorReminders.some(r => r.type === 'BOARD_UNLOCKED')).toBeTrue();
+  });
+
+  it('Arrange, Act, Assert: allows manager to request rework when board is in UNLOCK_REQUESTED status', () => {
+    // Arrange: Create and submit board
+    const board = createBoard({
+      projectId: testProject.id,
+      title: 'Unlock Rework Test Plan',
+      cycle: '2026-Q1',
+    }, testUser);
+
+    updateGoalItems(board.id, {
+      items: [{
+        title: 'Draft Milestone',
+        description: 'Needs rework',
+        category: 'DELIVERABLE',
+        targetDate: '2026-03-31',
+        weight: 100,
+        progressPercent: 0,
+        status: 'PENDING',
+      }],
+    }, testUser);
+
+    submitBoard(board.id, testUser);
+
+    // Contributor requests unlock
+    const unlockReq = requestBoardUnlock(board.id, testUser, 'I need to adjust milestone deliverables');
+    expect(unlockReq.status).toBe('UNLOCK_REQUESTED');
+
+    // Act: Manager decides to send to rework with specific critique
+    const reworkBoard = requestRework(board.id, managerUser, 'Revision guidance: align deliverables with Q1 objectives.');
+
+    // Assert: Board transitioned to REWORK_REQUESTED and revision bumped
+    expect(reworkBoard.status).toBe('REWORK_REQUESTED');
+    expect(reworkBoard.revisionNumber).toBe(2);
+
+    // Contributor receives rework reminder and unlock reminder is dismissed
+    const reminders = listUserReminders(testUser.id, 'org_test_unit');
+    expect(reminders.some(r => r.type === 'REWORK_REQUIRED')).toBeTrue();
+  });
 });
+

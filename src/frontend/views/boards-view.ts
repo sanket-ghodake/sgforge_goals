@@ -1,6 +1,7 @@
 /**
  * Individual Goal Center - My Goal Boards View (Tab 2)
- * Interactive management canvas for project flight plans, milestone boards, and review stages.
+ * Enterprise 2026 LTS Component: Fuses shadcn UI, Magic UI, Aceternity, and Luxe.
+ * Dedicated strictly to the authenticated user's own goal boards and personal flight plans.
  * @requirements [HLR-UI-201] [LLR-SUB-001] [HLR-GOALS-001]
  */
 
@@ -8,29 +9,118 @@ import { icons } from '../../lib/icons';
 import { escapeHtml, getStatusBadge } from '../../lib/ui';
 import type { AuthUser, GoalBoard, Project } from '../../lib/types';
 
-export function renderBoardsView(user: AuthUser, boards: GoalBoard[], projects: Project[]): string {
-  const isManager = user.roles.includes('roles/manager') || user.roles.includes('roles/admin') || user.roles.includes('roles/super_admin');
-  
-  // For managers/leadership: show all relevant team boards plus own boards
-  const displayBoards = isManager ? boards : boards.filter(b => b.ownerId === user.id);
+function renderBoardCard(b: GoalBoard): string {
+  const statusBadge = getStatusBadge(b.status);
+  const lockIcon = b.status === 'SUBMITTED' ? icons.lock : b.status === 'APPROVED' ? icons.award : icons.unlock;
+  const itemCount = Array.isArray(b.items) ? b.items.length : 0;
 
-  // Extract unique employee owners for the filter dropdown
-  const employeeOwners = Array.from(
-    new Map(displayBoards.map(b => [b.ownerId, { id: b.ownerId, name: b.ownerName }])).values()
-  );
+  return `
+    <div class="my-board-card" data-title="${escapeHtml(b.title.toLowerCase())}" data-project="${escapeHtml((b.projectName || '').toLowerCase())}" data-cycle="${escapeHtml(b.cycle.toLowerCase())}" data-status="${escapeHtml(b.status)}" style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; backdrop-filter: blur(12px); transition: border-color 0.2s ease, transform 0.2s ease;" onmouseover="this.style.borderColor='var(--forge-border-medium)'" onmouseout="this.style.borderColor='var(--forge-border)'">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; gap: 8px;">
+        <span style="font-size: 0.75rem; font-weight: 600; color: var(--forge-primary); display: inline-flex; align-items: center; gap: 6px;">
+          ${icons.folder} ${escapeHtml(b.projectName || 'Assigned Project')}
+        </span>
+        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; font-weight: 600; padding: 3px 9px; border-radius: 9999px; ${statusBadge.style}">
+          ${lockIcon} ${statusBadge.label}
+        </span>
+      </div>
+
+      <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; line-height: 1.3;">
+        <a href="?tab=board&id=${encodeURIComponent(b.id)}" onclick="navigateSpa('board', '${escapeHtml(b.id)}', event)" style="color: var(--forge-text-main); text-decoration: none;" onmouseover="this.style.color='var(--forge-primary)'" onmouseout="this.style.color='var(--forge-text-main)'">
+          ${escapeHtml(b.title)}
+        </a>
+      </h3>
+
+      <div style="font-size: 0.8rem; color: var(--forge-text-muted); margin-bottom: 18px; display: flex; gap: 12px; flex-wrap: wrap;">
+        <span style="display: inline-flex; align-items: center; gap: 4px;">${icons.calendar} ${escapeHtml(b.cycle)}</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px;">${icons.layers} Rev ${Number(b.revisionNumber) || 1}</span>
+        ${itemCount > 0 ? `<span style="display: inline-flex; align-items: center; gap: 4px;">${icons.target} ${itemCount} Milestones</span>` : ''}
+        ${b.submissionDeadline ? `
+          <span style="display: inline-flex; align-items: center; gap: 4px; color: var(--forge-warning);">
+            ${icons.clock} Due ${escapeHtml(b.submissionDeadline)}
+          </span>
+        ` : ''}
+      </div>
+
+      <div style="margin-top: auto; padding-top: 14px; border-top: 1px solid var(--forge-border); display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+        <button class="btn-action btn-outline" style="height: 32px; font-size: 0.75rem; padding: 0 11px;" onclick="openReviewDrawer('${escapeHtml(b.id)}')">
+          ${icons.messageSquare} Timeline
+        </button>
+        <a href="?tab=board&id=${encodeURIComponent(b.id)}" onclick="navigateSpa('board', '${escapeHtml(b.id)}', event)" class="btn-action btn-primary" style="height: 32px; font-size: 0.75rem; padding: 0 12px;">
+          Open Canvas ${icons.arrowRight}
+        </a>
+      </div>
+    </div>
+  `;
+}
+
+function renderBoardRow(b: GoalBoard): string {
+  const statusBadge = getStatusBadge(b.status);
+  const itemCount = Array.isArray(b.items) ? b.items.length : 0;
+
+  return `
+    <tr class="my-board-row" data-title="${escapeHtml(b.title.toLowerCase())}" data-project="${escapeHtml((b.projectName || '').toLowerCase())}" data-cycle="${escapeHtml(b.cycle.toLowerCase())}" data-status="${escapeHtml(b.status)}" style="border-bottom: 1px solid var(--forge-border); transition: background-color 0.15s ease;">
+      <td style="padding: 14px 18px; vertical-align: middle;">
+        <div style="display: flex; flex-direction: column; gap: 3px;">
+          <a href="?tab=board&id=${encodeURIComponent(b.id)}" onclick="navigateSpa('board', '${escapeHtml(b.id)}', event)" style="color: var(--forge-text-main); font-weight: 700; font-size: 0.92rem; text-decoration: none;" onmouseover="this.style.color='var(--forge-primary)'" onmouseout="this.style.color='var(--forge-text-main)'">
+            ${escapeHtml(b.title)}
+          </a>
+          <span style="font-size: 0.75rem; color: var(--forge-text-muted); display: inline-flex; align-items: center; gap: 4px;">
+            ${icons.folder} ${escapeHtml(b.projectName || 'Assigned Project')}
+          </span>
+        </div>
+      </td>
+      <td style="padding: 14px 18px; vertical-align: middle; white-space: nowrap;">
+        <div style="display: flex; gap: 8px; align-items: center; font-size: 0.775rem; color: var(--forge-text-muted);">
+          <span>${icons.calendar} ${escapeHtml(b.cycle)}</span>
+          <span style="padding: 1px 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--forge-border); font-family: var(--font-mono); font-size: 0.7rem;">Rev ${Number(b.revisionNumber) || 1}</span>
+        </div>
+      </td>
+      <td style="padding: 14px 18px; vertical-align: middle; white-space: nowrap; font-size: 0.775rem; color: var(--forge-text-muted);">
+        ${itemCount > 0 ? `${itemCount} Milestones` : 'Draft Stage'}
+      </td>
+      <td style="padding: 14px 18px; vertical-align: middle; white-space: nowrap;">
+        <span style="font-size: 0.75rem; font-weight: 600; padding: 3px 10px; border-radius: 9999px; ${statusBadge.style}">
+          ${statusBadge.label}
+        </span>
+      </td>
+      <td style="padding: 14px 18px; vertical-align: middle; white-space: nowrap; font-size: 0.775rem; color: var(--forge-text-muted);">
+        ${icons.clock} ${new Date(b.updatedAt).toLocaleDateString()}
+      </td>
+      <td style="padding: 14px 18px; vertical-align: middle; text-align: right; white-space: nowrap;">
+        <div style="display: inline-flex; gap: 8px; justify-content: flex-end;">
+          <button class="btn-action btn-outline" style="height: 30px; font-size: 0.75rem; padding: 0 10px;" onclick="openReviewDrawer('${escapeHtml(b.id)}')">
+            ${icons.messageSquare} Timeline
+          </button>
+          <a href="?tab=board&id=${encodeURIComponent(b.id)}" onclick="navigateSpa('board', '${escapeHtml(b.id)}', event)" class="btn-action btn-primary" style="height: 30px; font-size: 0.75rem; padding: 0 10px;">
+            Canvas ${icons.arrowRight}
+          </a>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+export function renderBoardsView(user: AuthUser, boards: GoalBoard[], projects: Project[]): string {
+  // Tab 2 is strictly for the user's OWN goal boards
+  const myBoards = boards.filter(b => b.ownerId === user.id);
+  const hasNoManagerAbove = !user.hasManagerAbove && !user.managerId && !user.managerName;
+
+  const submittedCount = myBoards.filter(b => b.status === 'SUBMITTED' || b.status === 'UNLOCK_REQUESTED' || b.status === 'LOCKED_OVERDUE').length;
+  const reworkCount = myBoards.filter(b => b.status === 'REWORK_REQUESTED').length;
+  const approvedCount = myBoards.filter(b => b.status === 'APPROVED').length;
+  const draftCount = myBoards.filter(b => b.status === 'DRAFT').length;
 
   return `
     <div style="margin-bottom: 32px;">
       <!-- Header Bar -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap; gap: 14px;">
         <div>
           <h1 style="font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px;">
-            ${isManager ? 'Team & Milestone Goal Boards' : 'My Goal Boards'}
+            My Goal Boards
           </h1>
           <p style="color: var(--forge-text-muted); font-size: 0.875rem;">
-            ${isManager 
-              ? 'Inspect employee commitment flight plans, review milestone deliverables, and audit approval readiness.'
-              : 'Manage milestone commitment blueprints, inspect locked review stages, and draft flight plans.'}
+            Design and execute your personal milestone commitment blueprints, track deliverable progress, and manage review stages.
           </p>
         </div>
         <button class="btn-action btn-primary" onclick="openNewBoardModal()">
@@ -38,124 +128,204 @@ export function renderBoardsView(user: AuthUser, boards: GoalBoard[], projects: 
         </button>
       </div>
 
-      <!-- Search & Filter Controls -->
-      <div style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 10px; padding: 14px 18px; margin-bottom: 24px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 220px; position: relative;">
-          <input id="boardsSearchInput" type="text" oninput="window.filterMyBoards && window.filterMyBoards()" placeholder="Search goal boards by title, project, or employee..." style="width: 100%; height: 38px; border-radius: 6px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border-medium); color: var(--forge-text-main); padding: 0 12px 0 34px; font-size: 0.875rem;" />
-          <span style="position: absolute; left: 10px; top: 11px; color: var(--forge-text-muted); display: flex;">${icons.search}</span>
-        </div>
-
-        ${isManager && employeeOwners.length > 1 ? `
-          <div style="min-width: 180px;">
-            <select id="boardEmployeeSelect" class="shadcn-select" onchange="window.filterMyBoards && window.filterMyBoards()" style="height: 38px; font-size: 0.85rem;">
-              <option value="ALL">All Team Members (${displayBoards.length} boards)</option>
-              <option value="${user.id}">My Own Boards</option>
-              ${employeeOwners.filter(e => e.id !== user.id).map(e => `
-                <option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>
-              `).join('')}
-            </select>
-          </div>
-        ` : ''}
-
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="boardStatusPills">
-          <button class="btn-action btn-primary" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('ALL', this)" style="height: 32px; font-size: 0.75rem;">All Boards</button>
-          <button class="btn-action btn-outline" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('SUBMITTED', this)" style="height: 32px; font-size: 0.75rem;">Under Review</button>
-          <button class="btn-action btn-outline" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('REWORK_REQUESTED', this)" style="height: 32px; font-size: 0.75rem;">Revisions</button>
-          <button class="btn-action btn-outline" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('APPROVED', this)" style="height: 32px; font-size: 0.75rem;">Approved</button>
-          <button class="btn-action btn-outline" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('DRAFT', this)" style="height: 32px; font-size: 0.75rem;">Drafts</button>
-        </div>
-      </div>
-
-      <!-- Boards Grid -->
-      <div id="myBoardsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px;">
-        ${displayBoards.length === 0 ? `
-          <div style="grid-column: 1 / -1; padding: 48px 24px; text-align: center; background: var(--forge-bg-card); border: 1px dashed var(--forge-border); border-radius: 12px;">
-            <div style="color: var(--forge-primary); margin-bottom: 12px; display: inline-flex;">${icons.target}</div>
-            <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 6px;">No Goal Boards Found</h3>
-            <p style="color: var(--forge-text-muted); font-size: 0.85rem; margin-bottom: 16px;">No flight plans currently created for this cycle.</p>
-            <button class="btn-action btn-primary" onclick="openNewBoardModal()">${icons.plus} Create Goal Board</button>
-          </div>
-        ` : displayBoards.map(board => {
-          const statusBadge = getStatusBadge(board.status);
-          const lockIcon = board.status === 'SUBMITTED' ? icons.lock : board.status === 'APPROVED' ? icons.award : icons.unlock;
-          return `
-            <div class="my-board-card" data-title="${board.title.toLowerCase()}" data-project="${(board.projectName || '').toLowerCase()}" data-owner="${board.ownerId}" data-ownername="${(board.ownerName || '').toLowerCase()}" data-status="${board.status}" style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; backdrop-filter: blur(12px); transition: transform 0.15s, border-color 0.15s;" onmouseover="this.style.borderColor='var(--forge-border-medium)'" onmouseout="this.style.borderColor='var(--forge-border)'">
-              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; gap: 8px;">
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                  <span style="font-size: 0.75rem; font-weight: 600; color: var(--forge-text-muted); display: inline-flex; align-items: center; gap: 6px;">
-                    ${icons.folder} ${board.projectName || 'Assigned Project'}
-                  </span>
-                  ${isManager ? `
-                    <span style="font-size: 0.72rem; font-weight: 600; color: var(--forge-primary); display: inline-flex; align-items: center; gap: 4px;">
-                      ${icons.user} ${escapeHtml(board.ownerName)}
-                    </span>
-                  ` : ''}
-                </div>
-                <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 0.75rem; font-weight: 600; padding: 3px 8px; border-radius: 9999px; ${statusBadge.style}">
-                  ${lockIcon} ${statusBadge.label}
-                </span>
-              </div>
-
-              <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 8px; line-height: 1.3;">
-                <a href="?tab=board&id=${board.id}" onclick="navigateSpa('board', '${board.id}', event)" style="color: var(--forge-text-main); text-decoration: none;">${escapeHtml(board.title)}</a>
-              </h3>
-
-              <div style="font-size: 0.8rem; color: var(--forge-text-muted); margin-bottom: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
-                <span style="display: inline-flex; align-items: center; gap: 4px;">${icons.calendar} ${escapeHtml(board.cycle)}</span>
-                <span style="display: inline-flex; align-items: center; gap: 4px;">${icons.layers} Rev ${board.revisionNumber}</span>
-                ${board.submissionDeadline ? `
-                  <span style="display: inline-flex; align-items: center; gap: 4px; color: var(--forge-warning);">
-                    ${icons.clock} Due ${escapeHtml(board.submissionDeadline)}
-                  </span>
-                ` : ''}
-              </div>
-
-              <div style="margin-top: auto; padding-top: 14px; border-top: 1px solid var(--forge-border); display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                <button class="btn-action btn-outline" style="height: 30px; font-size: 0.775rem; padding: 0 10px;" onclick="openReviewDrawer('${board.id}')">
-                  ${icons.messageSquare} Timeline
-                </button>
-                <a href="?tab=board&id=${board.id}" onclick="navigateSpa('board', '${board.id}', event)" class="btn-action btn-outline" style="height: 30px; font-size: 0.775rem; padding: 0 10px;">
-                  Open Board ${icons.arrowRight}
-                </a>
-              </div>
+      ${hasNoManagerAbove ? `
+        <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 12px; padding: 14px 18px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="color: var(--forge-primary); display: flex;">${icons.infoCircle}</span>
+            <div style="font-size: 0.825rem; color: var(--forge-text-muted);">
+              Apex Contributor Mode: Your flight plans are self-governed and do not require manager approval submission cycles.
             </div>
-          `;
-        }).join('')}
+          </div>
+          <span style="font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700; padding: 2px 10px; border-radius: 9999px; background: rgba(99, 102, 241, 0.15); color: var(--forge-primary);">
+            Self-Governed
+          </span>
+        </div>
+      ` : ''}
+
+      <!-- Luxe HUD Metric Cards for Personal Boards -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px;">
+        <div class="luxe-hud-card">
+          <div class="luxe-metric-label">
+            <span>ACTIVE FLIGHT PLANS</span>
+            <span style="color: var(--forge-primary);">${icons.target}</span>
+          </div>
+          <div class="luxe-metric-val">${myBoards.length}</div>
+          <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Personal goal boards</div>
+        </div>
+
+        <div class="luxe-hud-card">
+          <div class="luxe-metric-label">
+            <span>UNDER REVIEW</span>
+            <span style="color: var(--forge-warning);">${icons.lock}</span>
+          </div>
+          <div class="luxe-metric-val" style="color: var(--forge-warning);">${submittedCount}</div>
+          <div style="font-size: 0.75rem; color: var(--forge-text-muted);">${hasNoManagerAbove ? 'Self-directed' : 'Locked for review'}</div>
+        </div>
+
+        <div class="luxe-hud-card">
+          <div class="luxe-metric-label">
+            <span>REVISIONS NEEDED</span>
+            <span style="color: var(--forge-error);">${icons.alertCircle}</span>
+          </div>
+          <div class="luxe-metric-val" style="color: ${reworkCount > 0 ? 'var(--forge-error)' : 'var(--forge-text-main)'};">${reworkCount}</div>
+          <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Action required by you</div>
+        </div>
+
+        <div class="luxe-hud-card">
+          <div class="luxe-metric-label">
+            <span>APPROVED & SEALED</span>
+            <span style="color: var(--forge-success);">${icons.award}</span>
+          </div>
+          <div class="luxe-metric-val" style="color: var(--forge-success);">${approvedCount}</div>
+          <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Formally approved</div>
+        </div>
+
+        <div class="luxe-hud-card">
+          <div class="luxe-metric-label">
+            <span>DRAFTS</span>
+            <span style="color: var(--forge-accent);">${icons.edit}</span>
+          </div>
+          <div class="luxe-metric-val">${draftCount}</div>
+          <div style="font-size: 0.75rem; color: var(--forge-text-muted);">In-progress blueprints</div>
+        </div>
       </div>
+
+      <!-- Search, Status Filter Pills & View Switcher -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 14px;">
+        <div style="flex: 1; min-width: 240px; max-width: 440px; position: relative;">
+          <input id="boardsSearchInput" type="text" oninput="window.filterMyBoards && window.filterMyBoards()" placeholder="Search my boards by title, project, or cycle..." style="width: 100%; height: 38px; border-radius: 10px; background: var(--forge-bg-card); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 0 12px 0 36px; font-size: 0.85rem;" />
+          <span style="position: absolute; left: 12px; top: 11px; color: var(--forge-text-muted); display: flex;">${icons.search}</span>
+        </div>
+
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <div style="display: flex; gap: 6px; background: var(--forge-bg-surface); padding: 3px; border-radius: 10px; border: 1px solid var(--forge-border);" id="boardStatusPills">
+            <button class="btn-action btn-outline active-filter" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('ALL', this)" style="height: 30px; font-size: 0.75rem; padding: 0 10px;">All (${myBoards.length})</button>
+            <button class="btn-action btn-outline" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('DRAFT', this)" style="height: 30px; font-size: 0.75rem; padding: 0 10px;">Drafts (${draftCount})</button>
+            <button class="btn-action btn-outline" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('SUBMITTED', this)" style="height: 30px; font-size: 0.75rem; padding: 0 10px;">Under Review (${submittedCount})</button>
+            <button class="btn-action btn-outline" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('REWORK_REQUESTED', this)" style="height: 30px; font-size: 0.75rem; padding: 0 10px;">Revisions (${reworkCount})</button>
+            <button class="btn-action btn-outline" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('APPROVED', this)" style="height: 30px; font-size: 0.75rem; padding: 0 10px;">Approved (${approvedCount})</button>
+          </div>
+
+          <div style="display: inline-flex; gap: 2px; background: var(--forge-bg-surface); padding: 3px; border-radius: 10px; border: 1px solid var(--forge-border);">
+            <button class="btn-action btn-outline active-view" id="btnBoardsCardsView" data-astryx-tooltip="Cards View" style="height: 30px; padding: 0 10px; font-size: 0.75rem;" onclick="window.switchBoardsViewMode && window.switchBoardsViewMode('cards')">
+              ${icons.target} Cards
+            </button>
+            <button class="btn-action btn-outline" id="btnBoardsTableView" data-astryx-tooltip="List View" style="height: 30px; padding: 0 10px; font-size: 0.75rem;" onclick="window.switchBoardsViewMode && window.switchBoardsViewMode('table')">
+              ${icons.layers} List
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      ${myBoards.length === 0 ? `
+        <div style="padding: 48px 24px; text-align: center; background: var(--forge-bg-card); border: 1px dashed var(--forge-border); border-radius: 16px;">
+          <div style="width: 54px; height: 54px; border-radius: 50%; background: rgba(99, 102, 241, 0.12); color: var(--forge-primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; border: 1px solid rgba(99, 102, 241, 0.25);">
+            ${icons.target}
+          </div>
+          <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 6px; color: var(--forge-text-main);">No Goal Boards Found</h3>
+          <p style="color: var(--forge-text-muted); font-size: 0.875rem; max-width: 460px; margin: 0 auto 20px auto; line-height: 1.5;">
+            You have not created any flight plans for this cycle yet. Create your first goal board to track milestones, weights, and progress.
+          </p>
+          <button class="btn-action btn-primary" onclick="openNewBoardModal()">
+            ${icons.plus} Create Goal Board
+          </button>
+        </div>
+      ` : `
+        <!-- Mode A: Cards Grid -->
+        <div id="myBoardsCardsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px;">
+          ${myBoards.map(b => renderBoardCard(b)).join('')}
+        </div>
+
+        <!-- Mode B: Table List -->
+        <div id="myBoardsTableWrapper" style="display: none; background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 14px; overflow: hidden; backdrop-filter: blur(12px);">
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--forge-border); font-size: 0.7rem; font-weight: 700; color: var(--forge-text-muted); letter-spacing: 0.05em; text-transform: uppercase;">
+                  <th style="padding: 12px 18px;">Goal Board & Project</th>
+                  <th style="padding: 12px 18px;">Cycle & Rev</th>
+                  <th style="padding: 12px 18px;">Milestones</th>
+                  <th style="padding: 12px 18px;">Status</th>
+                  <th style="padding: 12px 18px;">Updated</th>
+                  <th style="padding: 12px 18px; text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${myBoards.map(b => renderBoardRow(b)).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `}
     </div>
 
     <script>
       (function() {
         let activeStatus = 'ALL';
+        let currentMode = 'cards';
 
         window.setBoardStatusFilter = function(status, btn) {
           activeStatus = status;
           document.querySelectorAll('#boardStatusPills button').forEach(b => {
-            b.className = 'btn-action btn-outline';
+            b.classList.remove('active-filter');
           });
-          if (btn) btn.className = 'btn-action btn-primary';
+          if (btn) btn.classList.add('active-filter');
           window.filterMyBoards();
+        };
+
+        window.switchBoardsViewMode = function(mode) {
+          currentMode = mode;
+          const grid = document.getElementById('myBoardsCardsGrid');
+          const table = document.getElementById('myBoardsTableWrapper');
+          const btnCards = document.getElementById('btnBoardsCardsView');
+          const btnTable = document.getElementById('btnBoardsTableView');
+
+          if (btnCards && btnTable) {
+            if (mode === 'cards') {
+              btnCards.classList.add('active-view');
+              btnTable.classList.remove('active-view');
+            } else {
+              btnCards.classList.remove('active-view');
+              btnTable.classList.add('active-view');
+            }
+          }
+          if (grid) grid.style.display = mode === 'cards' ? 'grid' : 'none';
+          if (table) table.style.display = mode === 'table' ? 'block' : 'none';
         };
 
         window.filterMyBoards = function() {
           const searchInput = document.getElementById('boardsSearchInput');
-          const empSelect = document.getElementById('boardEmployeeSelect');
-          const query = (searchInput ? searchInput.value || '' : '').toLowerCase();
-          const selectedOwner = empSelect ? empSelect.value : 'ALL';
-          const cards = document.querySelectorAll('.my-board-card');
+          const query = (searchInput ? searchInput.value || '' : '').toLowerCase().trim();
 
+          const cards = document.querySelectorAll('.my-board-card');
           cards.forEach(card => {
             const title = card.dataset.title || '';
             const proj = card.dataset.project || '';
-            const owner = card.dataset.owner || '';
-            const ownerName = card.dataset.ownername || '';
+            const cycle = card.dataset.cycle || '';
             const status = card.dataset.status || '';
 
-            const matchesQuery = !query || title.includes(query) || proj.includes(query) || ownerName.includes(query);
-            const matchesStatus = activeStatus === 'ALL' || status === activeStatus;
-            const matchesOwner = selectedOwner === 'ALL' || owner === selectedOwner;
+            const matchesQuery = !query || title.includes(query) || proj.includes(query) || cycle.includes(query);
+            const matchesStatus = activeStatus === 'ALL' || 
+              (activeStatus === 'SUBMITTED' && (status === 'SUBMITTED' || status === 'UNLOCK_REQUESTED' || status === 'LOCKED_OVERDUE')) ||
+              status === activeStatus;
 
-            card.style.display = matchesQuery && matchesStatus && matchesOwner ? 'flex' : 'none';
+            card.style.display = matchesQuery && matchesStatus ? 'flex' : 'none';
+          });
+
+          const rows = document.querySelectorAll('.my-board-row');
+          rows.forEach(row => {
+            const title = row.dataset.title || '';
+            const proj = row.dataset.project || '';
+            const cycle = row.dataset.cycle || '';
+            const status = row.dataset.status || '';
+
+            const matchesQuery = !query || title.includes(query) || proj.includes(query) || cycle.includes(query);
+            const matchesStatus = activeStatus === 'ALL' || 
+              (activeStatus === 'SUBMITTED' && (status === 'SUBMITTED' || status === 'UNLOCK_REQUESTED' || status === 'LOCKED_OVERDUE')) ||
+              status === activeStatus;
+
+            row.style.display = matchesQuery && matchesStatus ? '' : 'none';
           });
         };
       })();

@@ -265,4 +265,86 @@ describe('Tier 2 Integration: Goal Center REST API Dispatcher', () => {
       server.stop(true);
     }
   });
+
+  it('Arrange, Act, Assert: processes rework decision via POST api/boards/:id/review on UNLOCK_REQUESTED board', async () => {
+    const server = startgoalsServer(0);
+    const mgrToken = createInternalServiceToken(['roles/admin'], 'usr_integ_mgr_rev');
+    const empToken = createInternalServiceToken(['roles/manager'], 'usr_integ_emp_rev');
+    const baseUrl = `http://localhost:${server.port}`;
+
+    try {
+      // 1. Create project & board
+      const projRes = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cookie': `forge_session=${mgrToken}` },
+        body: JSON.stringify({ name: 'Rework Review Project', code: 'RWRK', description: 'Review testing' }),
+      });
+      const proj = await projRes.json();
+
+      const boardRes = await fetch(`${baseUrl}/api/boards`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cookie': `forge_session=${empToken}` },
+        body: JSON.stringify({ projectId: proj.id, title: 'Rework Flight Plan', cycle: '2026-Q1' }),
+      });
+      const board = await boardRes.json();
+
+      // 2. Put milestones and submit
+      await fetch(`${baseUrl}/api/boards/${board.id}/items`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Cookie': `forge_session=${empToken}` },
+        body: JSON.stringify({
+          items: [{
+            title: 'Q1 Deliverable',
+            description: 'Core functionality',
+            category: 'DELIVERABLE',
+            targetDate: '2026-03-31',
+            weight: 100,
+            progressPercent: 0,
+            status: 'PENDING',
+          }],
+        }),
+      });
+
+      await fetch(`${baseUrl}/api/boards/${board.id}/submit`, {
+        method: 'POST',
+        headers: { 'Cookie': `forge_session=${empToken}` },
+      });
+
+      // 3. Employee requests unlock
+      const unlockReqRes = await fetch(`${baseUrl}/api/boards/${board.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cookie': `forge_session=${empToken}` },
+        body: JSON.stringify({ decision: 'REQUEST_UNLOCK', comment: 'Need rework' }),
+      });
+      const unlockBody = await unlockReqRes.json();
+      expect(unlockReqRes.status).toBe(200);
+      expect(unlockBody.status).toBe('UNLOCK_REQUESTED');
+
+      // 4. Manager reviews and submits rework request
+      const reworkRes = await fetch(`${baseUrl}/api/boards/${board.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cookie': `forge_session=${mgrToken}` },
+        body: JSON.stringify({ decision: 'REWORK', comment: 'do rework' }),
+      });
+      const reworkBody = await reworkRes.json();
+
+      expect(reworkRes.status).toBe(200);
+      expect(reworkBody.status).toBe('REWORK_REQUESTED');
+      expect(reworkBody.revisionNumber).toBe(2);
+
+      // 5. Test validation error returns 400 problem JSON, not 500
+      const invalidRes = await fetch(`${baseUrl}/api/boards/${board.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cookie': `forge_session=${mgrToken}` },
+        body: JSON.stringify({ decision: 'REWORK', comment: '' }),
+      });
+      expect(invalidRes.status).toBe(400);
+      const invalidJson = await invalidRes.json();
+      expect(invalidJson.status).toBe(400);
+      expect(invalidJson.title).toBe('ValidationError');
+      expect(invalidJson.detail).toContain('mandatory');
+    } finally {
+      server.stop(true);
+    }
+  });
 });

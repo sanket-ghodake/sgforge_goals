@@ -59,7 +59,7 @@ export function renderDashboardView(user: AuthUser, boards: GoalBoard[], project
             <div class="profile-avatar">
               ${escapeHtml((cleanDisplayName(user.displayName) || user.email || 'E').charAt(0).toUpperCase())}
             </div>
-            <div class="profile-avatar-badge" title="Active Directory Sync"></div>
+            <div class="profile-avatar-badge" data-astryx-tooltip="Active Directory Sync"></div>
           </div>
           <div style="min-width: 0;">
             <div class="profile-hero-title-row">

@@ -5,7 +5,7 @@
  */
 
 import { icons } from '../../lib/icons';
-import { escapeHtml } from '../../lib/ui';
+import { escapeHtml, renderModernSelectHtml } from '../../lib/ui';
 import type { AuthUser, Reminder } from '../../lib/types';
 
 export function renderNewBoardModal(): string {
@@ -35,9 +35,12 @@ export function renderNewBoardModal(): string {
             </button>
           </div>
           
-          <select id="boardProjectSelect" class="shadcn-select" required>
-            <option value="" disabled selected>Select an active project...</option>
-          </select>
+          ${renderModernSelectHtml({
+            id: 'boardProjectSelect',
+            name: 'projectId',
+            placeholder: 'Select an active project...',
+            options: []
+          })}
 
           <!-- Inline Quick Project Creation Container -->
           <div id="quickProjectContainer" style="display: none; margin-top: 8px; padding: 10px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border); border-radius: 8px;">
@@ -58,10 +61,15 @@ export function renderNewBoardModal(): string {
 
         <div style="margin-bottom: 20px;">
           <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--forge-text-muted);">Evaluation Cycle</label>
-          <select id="boardCycleSelect" class="shadcn-select" required>
-            <option value="${currentCycle}">${currentCycle} (Current Active)</option>
-            <option value="${nextCycle}">${nextCycle} (Upcoming)</option>
-          </select>
+          ${renderModernSelectHtml({
+            id: 'boardCycleSelect',
+            name: 'cycle',
+            placeholder: 'Select evaluation cycle...',
+            options: [
+              { value: currentCycle, label: `${currentCycle} (Current Active)`, selected: true },
+              { value: nextCycle, label: `${nextCycle} (Upcoming)` }
+            ]
+          })}
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: 10px;">
@@ -167,3 +175,26 @@ export function renderLogoutModal(user: AuthUser): string {
     </div>
   </div>`;
 }
+
+export function renderUniversalConfirmModal(): string {
+  return `
+  <!-- Universal Confirmation Modal Dialog (Zero Browser Confirm) -->
+  <div class="modal-backdrop" id="universalConfirmModal" onclick="if(event.target === this) closeModernConfirm()">
+    <div class="modal-box" style="max-width: 440px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <h3 id="confirmModalTitle" style="font-size: 1.1rem; font-weight: 700; color: var(--forge-text-main);">Confirm Action</h3>
+        <button type="button" class="btn-icon" onclick="closeModernConfirm()">${icons.close}</button>
+      </div>
+
+      <p id="confirmModalMsg" style="font-size: 0.875rem; color: var(--forge-text-muted); margin-bottom: 22px; line-height: 1.5;">
+        Are you sure you want to proceed?
+      </p>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" id="confirmModalCancelBtn" class="btn-action btn-outline" onclick="closeModernConfirm()">Cancel</button>
+        <button type="button" id="confirmModalActionBtn" class="btn-action btn-primary" onclick="executeModernConfirm()">Confirm</button>
+      </div>
+    </div>
+  </div>`;
+}
+

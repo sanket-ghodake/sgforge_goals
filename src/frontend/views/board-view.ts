@@ -5,18 +5,19 @@
  */
 
 import { icons } from '../../lib/icons';
-import { escapeHtml } from '../../lib/ui';
+import { escapeHtml, renderModernSelectHtml } from '../../lib/ui';
 import type { AuthUser, GoalBoard, GoalItem } from '../../lib/types';
+import { getCycleDefaultTargetDate } from '../../backend/services/board-service';
 
 /**
  * renderBoardView
  * @requirements [HLR-UI-201] [LLR-GOALS-001]
  */
 export function renderBoardView(user: AuthUser, board: GoalBoard): string {
-  const isOwner = board.ownerId === user.id || user.roles.includes('roles/admin') || user.roles.includes('roles/super_admin');
-  const isManager = user.roles.includes('roles/manager') || user.roles.includes('roles/admin') || user.roles.includes('roles/super_admin');
-  const isTeamMember = isManager && (board.ownerId !== user.id);
-  const canAccessReview = isOwner || isTeamMember;
+  const defaultTargetDate = getCycleDefaultTargetDate(board.cycle);
+  const isOwner = board.ownerId === user.id;
+  const isReviewer = !isOwner && (user.roles.includes('roles/manager') || user.roles.includes('roles/admin') || user.roles.includes('roles/super_admin'));
+  const canAccessReview = isOwner || isReviewer;
 
   const isSubmitted = board.status === 'SUBMITTED';
   const isApproved = board.status === 'APPROVED';
@@ -50,7 +51,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
             </button>
           ` : ''}
 
-          ${isManager ? `
+          ${isReviewer ? `
             <button class="btn-action btn-outline" onclick="handleSetDeadlinePrompt('${board.id}')" data-astryx-tooltip="Set or extend submission deadline date">
               ${icons.calendar} Set Deadline (${escapeHtml(board.submissionDeadline || 'None')})
             </button>
@@ -63,9 +64,15 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
             <button class="btn-action btn-outline" onclick="saveBoardDraft()">
               ${icons.check} Save Draft
             </button>
-            <button class="btn-action btn-primary" onclick="submitBoardForReview()" ${!isWeightValid ? 'disabled title="Total weight must equal 100%" style="opacity: 0.5; cursor: not-allowed;"' : ''}>
-              ${icons.send} ${isRework ? 'Resubmit for Approval' : 'Submit Board'}
-            </button>
+            ${!board.managerId && !board.managerName ? `
+              <button class="btn-action btn-primary" onclick="submitBoardForReview()" ${!isWeightValid ? 'disabled data-astryx-tooltip="Total weight must equal 100%" style="opacity: 0.5; cursor: not-allowed;"' : 'data-astryx-tooltip="No manager assigned - self-seal milestone flight plan"'}>
+                ${icons.send} Self-Seal Flight Plan
+              </button>
+            ` : `
+              <button class="btn-action btn-primary" onclick="submitBoardForReview()" ${!isWeightValid ? 'disabled data-astryx-tooltip="Total weight must equal 100%" style="opacity: 0.5; cursor: not-allowed;"' : ''}>
+                ${icons.send} ${isRework ? 'Resubmit for Approval' : 'Submit Board'}
+              </button>
+            `}
           ` : ''}
 
           ${isOwner && isLocked ? `
@@ -74,7 +81,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
             </button>
           ` : ''}
 
-          ${isManager && isLocked ? `
+          ${isReviewer && isLocked ? `
             <button class="btn-action btn-outline" style="color: var(--forge-success); border-color: rgba(16, 185, 129, 0.4);" onclick="handleUnlockBoard('${board.id}')">
               ${icons.lock} Manager Unlock
             </button>
@@ -140,7 +147,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
         </div>
 
         <div id="milestonesContainer" style="display: flex; flex-direction: column; gap: 14px;">
-          ${items.map((item, index) => renderMilestoneCard(item, index + 1, canEdit, board.status === 'APPROVED' || board.status === 'COMPLETED')).join('')}
+          ${items.map((item, index) => renderMilestoneCard(item, index + 1, canEdit, board.status === 'APPROVED' || board.status === 'COMPLETED', defaultTargetDate)).join('')}
         </div>
       </div>
 
@@ -179,7 +186,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
           <input type="hidden" id="deadlineBoardId" />
           <div style="margin-bottom: 16px;">
             <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--forge-text-muted);">Deadline Date (YYYY-MM-DD)</label>
-            <input type="date" id="deadlineInput" required value="2026-03-31" style="width: 100%; height: 38px; border-radius: 8px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 0 12px; font-size: 0.9rem;" />
+            <input type="date" id="deadlineInput" required value="${escapeHtml(board.submissionDeadline || defaultTargetDate)}" style="width: 100%; height: 38px; border-radius: 8px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 0 12px; font-size: 0.9rem;" />
           </div>
           <div style="display: flex; justify-content: flex-end; gap: 10px;">
             <button type="button" class="btn-action btn-outline" onclick="closeDeadlineModal()">Cancel</button>
@@ -191,6 +198,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
 
     <script>
       window.currentBoardId = "${board.id}";
+      window.boardCycleDefaultDate = "${defaultTargetDate}";
 
       window.recalculateWeights = function() {
         const weightInputs = document.querySelectorAll('.milestone-weight-input');
@@ -224,6 +232,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
         if (!container) return;
         const index = container.querySelectorAll('.milestone-card').length + 1;
         const div = document.createElement('div');
+        const defaultDate = window.boardCycleDefaultDate || '';
         div.innerHTML = \`
           <div class="milestone-card" data-id="" style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 10px; padding: 18px; position: relative;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
@@ -231,7 +240,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
                 <span style="font-size: 0.8rem; font-weight: 700; color: var(--forge-primary);">Milestone #\${index}</span>
                 <span style="font-size: 0.75rem; background: rgba(255,255,255,0.06); padding: 2px 8px; border-radius: 4px; font-weight: 600;">DELIVERABLE</span>
               </div>
-              <button type="button" onclick="this.closest('.milestone-card').remove(); window.recalculateWeights();" class="btn-icon" style="width:24px; height:24px;">${icons.trash}</button>
+              <button type="button" onclick="const c=this.closest('.milestone-card'); window.showModernConfirm ? window.showModernConfirm({ title:'Remove Milestone', message:'Remove this milestone deliverable from the flight plan?', confirmText:'Remove', confirmVariant:'destructive', onConfirm:()=>{ c.remove(); window.recalculateWeights(); } }) : (c.remove(), window.recalculateWeights())" class="btn-icon" data-astryx-tooltip="Remove milestone" style="width:24px; height:24px;">${icons.trash}</button>
             </div>
             <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
               <div>
@@ -240,15 +249,22 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
               </div>
               <div>
                 <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Category</label>
-                <select class="shadcn-select milestone-category-select" style="height:34px;">
-                  <option value="DELIVERABLE">Deliverable</option>
-                  <option value="METRIC">Metric</option>
-                  <option value="LEARNING">Learning</option>
-                </select>
+                <div class="modern-select-wrap" id="select_new_cat_\${index}">
+                  <button type="button" class="modern-select-trigger" onclick="window.toggleModernSelect && window.toggleModernSelect('select_new_cat_\${index}')" style="height:34px;">
+                    <span class="modern-select-label">Deliverable</span>
+                    <span class="modern-select-arrow">${icons.chevronDown}</span>
+                  </button>
+                  <div class="modern-select-menu">
+                    <div class="modern-select-option selected" data-value="DELIVERABLE" onclick="window.selectModernOption && window.selectModernOption('select_new_cat_\${index}', 'DELIVERABLE', 'Deliverable')">Deliverable</div>
+                    <div class="modern-select-option" data-value="METRIC" onclick="window.selectModernOption && window.selectModernOption('select_new_cat_\${index}', 'METRIC', 'Metric')">Metric</div>
+                    <div class="modern-select-option" data-value="LEARNING" onclick="window.selectModernOption && window.selectModernOption('select_new_cat_\${index}', 'LEARNING', 'Learning')">Learning</div>
+                  </div>
+                  <input type="hidden" class="milestone-category-select" id="select_new_cat_\${index}_input" value="DELIVERABLE" />
+                </div>
               </div>
               <div>
                 <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Target Date</label>
-                <input type="date" class="milestone-target-date-input" value="2026-03-31" style="width:100%; height:34px; border-radius:6px; background:var(--forge-bg-surface); border:1px solid var(--forge-border-medium); color:var(--forge-text-main); padding:0 6px; font-size:0.8rem;" />
+                <input type="date" class="milestone-target-date-input" value="\${defaultDate}" style="width:100%; height:34px; border-radius:6px; background:var(--forge-bg-surface); border:1px solid var(--forge-border-medium); color:var(--forge-text-main); padding:0 6px; font-size:0.8rem;" />
               </div>
               <div>
                 <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Weight (%)</label>
@@ -260,10 +276,10 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
               <textarea class="milestone-desc-input" rows="2" style="width:100%; border-radius:6px; background:var(--forge-bg-surface); border:1px solid var(--forge-border-medium); color:var(--forge-text-main); padding:6px 8px; font-size:0.85rem;"></textarea>
             </div>
             <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--forge-border); padding-top: 10px; font-size: 0.8rem;">
-              <span style="color: var(--forge-text-muted);">${icons.calendar} Target: 2026-03-31</span>
+              <span style="color: var(--forge-text-muted);">${icons.calendar} Target: \${defaultDate}</span>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <span style="color: var(--forge-text-muted);">Progress:</span>
-                <input type="range" min="0" max="100" value="0" class="milestone-progress-input" style="width: 80px; accent-color: var(--forge-primary);" />
+                <input type="range" min="0" max="100" value="0" class="milestone-progress-input modern-range-input" style="width: 80px;" />
                 <span style="font-size: 0.8rem; font-weight: 700; color: var(--forge-primary); min-width: 32px;">0%</span>
               </div>
             </div>
@@ -383,46 +399,27 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
 }
 
 function renderLockBanner(board: GoalBoard): string {
-  const statusBanners: Record<string, { bg: string; border: string; icon: string; color: string; title: string; text: string }> = {
-    SUBMITTED: {
-      bg: 'var(--forge-warning-bg)', border: 'rgba(251, 191, 36, 0.3)', icon: icons.lock, color: 'var(--forge-warning)',
-      title: 'Goal Board is Locked Under Manager Review',
-      text: `This board was submitted on ${board.submittedAt ? new Date(board.submittedAt).toLocaleDateString() : 'recently'}. Modifications are temporarily locked while your manager conducts the review.`
-    },
-    REWORK_REQUESTED: {
-      bg: 'var(--forge-error-bg)', border: 'rgba(248, 113, 113, 0.3)', icon: icons.alertCircle, color: 'var(--forge-error)',
-      title: `Revisions Requested by Manager (Revision ${board.revisionNumber})`,
-      text: 'Your manager reviewed your goals and requested updates. Editing is unlocked so you can incorporate the feedback and resubmit.'
-    },
-    APPROVED: {
-      bg: 'var(--forge-success-bg)', border: 'rgba(52, 211, 153, 0.3)', icon: icons.award, color: 'var(--forge-success)',
-      title: 'Approved & Sealed Milestone Blueprint',
-      text: `Formally approved on ${board.approvedAt ? new Date(board.approvedAt).toLocaleDateString() : 'Cycle Active'}. Snapshot is sealed. Click "Request Unlock" if revisions are needed.`
-    },
-    LOCKED_OVERDUE: {
-      bg: 'var(--forge-error-bg)', border: 'rgba(248, 113, 113, 0.3)', icon: icons.lock, color: 'var(--forge-error)',
-      title: 'Submission Deadline Passed (Auto-Locked)',
-      text: `The deadline (${escapeHtml(board.submissionDeadline)}) has passed without submission. Click "Request Unlock" to ask your manager to extend the deadline and unlock editing.`
-    },
-    UNLOCK_REQUESTED: {
-      bg: 'var(--forge-warning-bg)', border: 'rgba(251, 191, 36, 0.3)', icon: icons.infoCircle, color: 'var(--forge-warning)',
-      title: 'Unlock Request Pending Manager Approval',
-      text: 'An unlock request has been submitted to your manager. You will be notified when your manager unlocks editing.'
-    }
+  const banners: Record<string, { bg: string; border: string; icon: string; color: string; title: string; text: string }> = {
+    SUBMITTED: { bg: 'var(--forge-warning-bg)', border: 'rgba(251, 191, 36, 0.3)', icon: icons.lock, color: 'var(--forge-warning)', title: 'Goal Board is Locked Under Manager Review', text: `Submitted on ${board.submittedAt ? new Date(board.submittedAt).toLocaleDateString() : 'recently'}. Locked while manager reviews.` },
+    REWORK_REQUESTED: { bg: 'var(--forge-error-bg)', border: 'rgba(248, 113, 113, 0.3)', icon: icons.alertCircle, color: 'var(--forge-error)', title: `Revisions Requested by Manager (Revision ${board.revisionNumber})`, text: 'Manager requested updates. Editing unlocked to incorporate feedback.' },
+    APPROVED: { bg: 'var(--forge-success-bg)', border: 'rgba(52, 211, 153, 0.3)', icon: icons.award, color: 'var(--forge-success)', title: 'Approved & Sealed Milestone Blueprint', text: `Approved on ${board.approvedAt ? new Date(board.approvedAt).toLocaleDateString() : 'Cycle Active'}. Sealed snapshot.` },
+    LOCKED_OVERDUE: { bg: 'var(--forge-error-bg)', border: 'rgba(248, 113, 113, 0.3)', icon: icons.lock, color: 'var(--forge-error)', title: 'Submission Deadline Passed (Auto-Locked)', text: `Deadline (${escapeHtml(board.submissionDeadline)}) passed without submission. Request unlock to extend.` },
+    UNLOCK_REQUESTED: { bg: 'var(--forge-warning-bg)', border: 'rgba(251, 191, 36, 0.3)', icon: icons.infoCircle, color: 'var(--forge-warning)', title: 'Unlock Request Pending Manager Approval', text: 'Unlock request submitted. You will be notified when unlocked.' }
   };
-
-  const b = statusBanners[board.status];
+  const b = banners[board.status];
   if (!b) {
-    return `<div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--forge-border); border-radius: 10px; padding: 14px 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px;"><span style="color: var(--forge-primary); display: flex;">${icons.infoCircle}</span><div style="font-size: 0.825rem; color: var(--forge-text-muted);">Draft Mode: Add project milestones, set relative weights (must total 100%), and submit to your manager for formal approval.</div></div>`;
+    if (!board.managerId && !board.managerName) {
+      return `<div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 10px; padding: 14px 20px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;"><div style="display: flex; align-items: center; gap: 12px;"><span style="color: var(--forge-primary); display: flex;">${icons.infoCircle}</span><div><div style="font-size: 0.9rem; font-weight: 700; color: var(--forge-text-main);">Apex Profile: No Manager Above • No Submission Cycle</div><div style="font-size: 0.8rem; color: var(--forge-text-muted);">Self-governed milestone flight plan.</div></div></div><span style="font-family: var(--font-mono); font-size: 0.72rem; padding: 3px 10px; border-radius: 9999px; background: rgba(99, 102, 241, 0.15); color: var(--forge-primary); font-weight: 700;">Self-Governed</span></div>`;
+    }
+    return `<div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--forge-border); border-radius: 10px; padding: 14px 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px;"><span style="color: var(--forge-primary); display: flex;">${icons.infoCircle}</span><div style="font-size: 0.825rem; color: var(--forge-text-muted);">Draft Mode: Add project milestones, set relative weights (total 100%), and submit for approval.</div></div>`;
   }
-
   return `<div style="background: ${b.bg}; border: 1px solid ${b.border}; border-radius: 10px; padding: 16px 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 14px;"><span style="color: ${b.color}; display: flex;">${b.icon}</span><div><h4 style="font-size: 0.95rem; font-weight: 700; color: ${b.color}; margin-bottom: 2px;">${b.title}</h4><p style="font-size: 0.8rem; color: var(--forge-text-main);">${b.text}</p></div></div>`;
 }
 
-function renderMilestoneCard(item: GoalItem, index: number, canEdit: boolean, isBoardApproved: boolean = false): string {
+function renderMilestoneCard(item: GoalItem, index: number, canEdit: boolean, isBoardApproved: boolean = false, fallbackTargetDate: string = '2026-03-31'): string {
   const safeTitle = escapeHtml(item.title);
   const safeDesc = escapeHtml(item.description);
-  const safeTargetDate = escapeHtml(item.targetDate || '2026-03-31');
+  const safeTargetDate = escapeHtml(item.targetDate || fallbackTargetDate);
 
   return `
     <div class="milestone-card" data-id="${item.id}" style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 10px; padding: 18px; position: relative;">
@@ -431,9 +428,12 @@ function renderMilestoneCard(item: GoalItem, index: number, canEdit: boolean, is
           <span style="font-size: 0.8rem; font-weight: 700; color: var(--forge-primary);">Milestone #${index}</span>
           <span style="font-size: 0.75rem; background: rgba(255,255,255,0.06); padding: 2px 8px; border-radius: 4px; font-weight: 600;">${item.category}</span>
         </div>
-        ${canEdit ? `
-          <button type="button" onclick="this.closest('.milestone-card').remove(); recalculateWeights();" class="btn-icon" style="width:24px; height:24px;">${icons.trash}</button>
-        ` : ''}
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <button type="button" onclick="openReviewDrawer('${item.boardId}', '${item.id}')" class="btn-icon" data-astryx-tooltip="Discuss Milestone in Review Chat" style="width:28px; height:28px; color: var(--forge-primary);">${icons.messageSquare}</button>
+          ${canEdit ? `
+            <button type="button" onclick="const c=this.closest('.milestone-card'); window.showModernConfirm ? window.showModernConfirm({ title:'Remove Milestone', message:'Remove this milestone deliverable from the flight plan?', confirmText:'Remove', confirmVariant:'destructive', onConfirm:()=>{ c.remove(); recalculateWeights(); } }) : (c.remove(), recalculateWeights())" class="btn-icon" data-astryx-tooltip="Remove milestone" style="width:24px; height:24px;">${icons.trash}</button>
+          ` : ''}
+        </div>
       </div>
 
       <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
@@ -443,11 +443,22 @@ function renderMilestoneCard(item: GoalItem, index: number, canEdit: boolean, is
         </div>
         <div>
           <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Category</label>
-          <select class="shadcn-select milestone-category-select" ${!canEdit ? 'disabled' : ''} style="height:34px;">
-            <option value="DELIVERABLE" ${item.category === 'DELIVERABLE' ? 'selected' : ''}>Deliverable</option>
-            <option value="METRIC" ${item.category === 'METRIC' ? 'selected' : ''}>Metric</option>
-            <option value="LEARNING" ${item.category === 'LEARNING' ? 'selected' : ''}>Learning</option>
-          </select>
+          ${canEdit ? renderModernSelectHtml({
+            id: `cat_select_${item.id}`,
+            value: item.category,
+            inputClassName: 'milestone-category-select',
+            triggerStyle: 'height:34px;',
+            options: [
+              { value: 'DELIVERABLE', label: 'Deliverable' },
+              { value: 'METRIC', label: 'Metric' },
+              { value: 'LEARNING', label: 'Learning' }
+            ]
+          }) : `
+            <div style="height:34px; padding:0 12px; display:flex; align-items:center; background:var(--forge-bg-surface); border:1px solid var(--forge-border-medium); border-radius:6px; font-size:0.85rem; color:var(--forge-text-muted);">
+              ${escapeHtml(item.category)}
+            </div>
+            <input type="hidden" class="milestone-category-select" value="${escapeHtml(item.category)}" />
+          `}
         </div>
         <div>
           <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Target Date</label>
@@ -468,7 +479,7 @@ function renderMilestoneCard(item: GoalItem, index: number, canEdit: boolean, is
         <span style="color: var(--forge-text-muted);">${icons.calendar} Target: ${safeTargetDate}</span>
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="color: var(--forge-text-muted);">Progress:</span>
-          <input type="range" min="0" max="100" value="${item.progressPercent}" class="milestone-progress-input" ${!isBoardApproved ? 'disabled title="Milestone progress can only be updated on approved boards"' : ''} oninput="window.updateItemProgress && window.updateItemProgress('${item.boardId}', '${item.id}', this.value)" style="width: 80px; accent-color: var(--forge-primary); ${!isBoardApproved ? 'opacity: 0.5; cursor: not-allowed;' : ''}" />
+          <input type="range" min="0" max="100" value="${item.progressPercent}" class="milestone-progress-input modern-range-input" ${!isBoardApproved ? 'disabled data-astryx-tooltip="Milestone progress can only be updated on approved boards"' : ''} oninput="window.updateItemProgress && window.updateItemProgress('${item.boardId}', '${item.id}', this.value)" style="width: 80px; ${!isBoardApproved ? 'opacity: 0.5; cursor: not-allowed;' : ''}" />
           <span id="progressVal_${item.id}" style="font-size: 0.8rem; font-weight: 700; color: var(--forge-primary); min-width: 32px;">${item.progressPercent}%</span>
         </div>
       </div>

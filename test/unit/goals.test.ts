@@ -75,4 +75,117 @@ describe('Tier 1 Unit: Individual Goal Center Database & Invariants [LLR-APP-002
     expect(cleanDisplayName(null)).toBe('');
     expect(cleanDisplayName(undefined)).toBe('');
   });
+
+  it('Arrange, Act, Assert: renders "No Team Under You" when employee has zero direct reports', async () => {
+    const { renderTeamReviewsSection } = await import('../../src/frontend/views/team-reviews-list');
+    const user = {
+      id: 'usr_no_team',
+      email: 'solo@forge.internal',
+      displayName: 'Solo Contributor',
+      roles: ['roles/manager'],
+      directReportsCount: 0,
+      isManagerInDirectory: false,
+    };
+
+    const html = renderTeamReviewsSection(user, []);
+    expect(html).toContain('No Team Under You');
+    expect(html).toContain('zero direct reports');
+  });
+
+  it('Arrange, Act, Assert: renders "No Team of Managers Under You" and employee sublists when direct reports are ICs', async () => {
+    const { renderTeamReviewsSection } = await import('../../src/frontend/views/team-reviews-list');
+    const user = {
+      id: 'usr_frontline_mgr',
+      email: 'lead@forge.internal',
+      displayName: 'Frontline Lead',
+      roles: ['roles/manager'],
+      directReportsCount: 1,
+      subordinateManagersCount: 0,
+      isManagerInDirectory: true,
+    };
+
+    const sampleBoard = {
+      id: 'board_test_sub',
+      orgId: 'org_default',
+      projectId: 'proj_alpha',
+      projectName: 'Apollo Mission',
+      ownerId: 'usr_rep_1',
+      ownerName: 'Vikramaditya Patel',
+      ownerEmail: 'vikram@forge.internal',
+      ownerDepartment: 'Accounting & Billing',
+      title: 'Q3 Financial Consolidation',
+      cycle: '2026-Q3',
+      status: 'REWORK_REQUESTED' as const,
+      lockVersion: 1,
+      revisionNumber: 2,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const html = renderTeamReviewsSection(user, [sampleBoard]);
+    expect(html).toContain('No Team of Managers Under You');
+    expect(html).toContain('Vikramaditya Patel');
+    expect(html).toContain('Q3 Financial Consolidation');
+    expect(html).toContain('team-sublist-table-view');
+    expect(html).toContain('team-sublist-cards-list');
+    expect(html).toContain('team-board-row-card');
+    expect(html).toContain('team-sublist-cards-view');
+  });
+
+  it('Arrange, Act, Assert: renders "No Team of Managers Under You" empty state when frontline manager has 0 submitted boards', async () => {
+    const { renderTeamReviewsSection } = await import('../../src/frontend/views/team-reviews-list');
+    const frontlineUser = {
+      id: 'usr_frontline_lead',
+      email: 'frontline@forge.internal',
+      displayName: 'Frontline Manager',
+      roles: ['roles/manager'],
+      directReportsCount: 3,
+      subordinateManagersCount: 0,
+      isManagerInDirectory: true,
+    };
+
+    const html = renderTeamReviewsSection(frontlineUser, []);
+    expect(html).toContain('No Team of Managers Under You');
+    expect(html).toContain('Frontline Leadership • Directory Verified');
+    expect(html).toContain('individual contributors');
+    expect(html).not.toContain('SG Forge');
+    expect(html).not.toContain('sgforge');
+  });
+
+  it('Arrange, Act, Assert: renders "No Team Flight Plans Submitted" when multi-tier manager has 0 boards', async () => {
+    const { renderTeamReviewsSection } = await import('../../src/frontend/views/team-reviews-list');
+    const directorUser = {
+      id: 'usr_director',
+      email: 'director@forge.internal',
+      displayName: 'Director of Engineering',
+      roles: ['roles/manager'],
+      directReportsCount: 4,
+      subordinateManagersCount: 2,
+      isManagerInDirectory: true,
+    };
+
+    const html = renderTeamReviewsSection(directorUser, []);
+    expect(html).toContain('No Team Flight Plans Submitted');
+    expect(html).toContain('Multi-Tier Leadership');
+    expect(html).not.toContain('SG Forge');
+    expect(html).not.toContain('sgforge');
+  });
+
+  it('Arrange, Act, Assert: renders apex no-manager banner when employee has no manager above them with zero SG Forge mentions', async () => {
+    const { renderManagerView } = await import('../../src/frontend/views/manager-view');
+    const apexUser = {
+      id: 'usr_ceo',
+      email: 'ceo@forge.internal',
+      displayName: 'Executive Leader',
+      roles: ['roles/super_admin'],
+      managerId: null,
+      managerName: null,
+      hasManagerAbove: false,
+    };
+
+    const html = renderManagerView(apexUser, [], []);
+    expect(html).toContain('Apex Leadership • No Upward Manager Assigned • No Submission Cycle');
+    expect(html).not.toContain('SG Forge');
+    expect(html).not.toContain('sgforge');
+  });
 });

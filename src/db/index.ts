@@ -135,8 +135,11 @@ goalsDb.run(`
 
 // Add query optimization indexes
 goalsDb.run('CREATE INDEX IF NOT EXISTS idx_goal_boards_org_owner ON goal_boards(org_id, owner_id);');
+goalsDb.run('CREATE INDEX IF NOT EXISTS idx_goal_boards_status_owner ON goal_boards(status, owner_id);');
 goalsDb.run('CREATE INDEX IF NOT EXISTS idx_goal_items_board_id ON goal_items(board_id);');
+goalsDb.run('CREATE INDEX IF NOT EXISTS idx_goal_items_board_order ON goal_items(board_id, sort_order);');
 goalsDb.run('CREATE INDEX IF NOT EXISTS idx_review_comments_board_id ON review_comments(board_id);');
+goalsDb.run('CREATE INDEX IF NOT EXISTS idx_review_comments_board_time ON review_comments(board_id, created_at);');
 goalsDb.run('CREATE INDEX IF NOT EXISTS idx_reminders_org_user ON reminders(org_id, user_id, is_dismissed);');
 
 // Seed initial data if explicitly requested (Strict Zero-Dummy Invariant)

@@ -5,10 +5,14 @@
  */
 
 import { goalsDb } from '../../db';
-import type { AuthUser, GoalBoard, GoalBoardRow } from '../../lib/types';
+import type { AuthUser, GoalBoard, GoalBoardRow, GoalBoardStatus } from '../../lib/types';
 import { ForbiddenError, getBoardById, ValidationError } from './board-service';
 
 function assertManagerOrAdmin(user: AuthUser, board?: GoalBoard): void {
+  if (board && board.ownerId === user.id) {
+    throw new ForbiddenError('Segregation of Duties Violation: You cannot review, rework, or approve your own goal board. Review must be executed by your assigned manager.');
+  }
+
   const isAdmin = user.roles.some(r => r === 'roles/admin' || r === 'roles/super_admin');
   if (isAdmin) return;
 
@@ -18,10 +22,13 @@ function assertManagerOrAdmin(user: AuthUser, board?: GoalBoard): void {
   }
 
   if (board) {
-    const isAssignedManager = Boolean(board.ownerId && (board.managerName === user.displayName || user.id === 'usr_template_tester'));
-    // Note: Allow designated manager or admin
-    if (!isAssignedManager && !hasManagerRole) {
-      throw new ForbiddenError('You are not authorized to review goal boards outside your assigned reporting chain.');
+    const isAssignedManager = Boolean(
+      (board.managerId && board.managerId === user.id) ||
+      (board.managerName && user.displayName && board.managerName.toLowerCase() === user.displayName.toLowerCase()) ||
+      (board.ownerDepartment && user.department && board.ownerDepartment.toLowerCase() === user.department.toLowerCase())
+    );
+    if (!isAssignedManager && !isAdmin) {
+      throw new ForbiddenError('You are not authorized to review goal boards outside your assigned reporting chain or department.');
     }
   }
 }
@@ -58,12 +65,13 @@ export function listPendingReviews(orgId: string): GoalBoard[] {
 }
 
 export function requestRework(boardId: string, managerUser: AuthUser, commentText: string, itemId?: string): GoalBoard {
-  assertManagerOrAdmin(managerUser);
   const orgId = managerUser.orgId || 'org_default';
   const board = getBoardById(boardId, orgId);
+  assertManagerOrAdmin(managerUser, board);
 
-  if (board.status !== 'SUBMITTED' && board.status !== 'APPROVED') {
-    throw new ValidationError(`Cannot request rework for board in status "${board.status}". Board must be SUBMITTED or APPROVED.`);
+  const allowedStatuses: GoalBoardStatus[] = ['SUBMITTED', 'APPROVED', 'UNLOCK_REQUESTED', 'LOCKED_OVERDUE', 'REWORK_REQUESTED'];
+  if (!allowedStatuses.includes(board.status)) {
+    throw new ValidationError(`Cannot request rework for board in status "${board.status}". Board must be SUBMITTED, APPROVED, UNLOCK_REQUESTED, LOCKED_OVERDUE, or REWORK_REQUESTED.`);
   }
 
   if (!commentText || commentText.trim().length === 0) {
@@ -74,6 +82,7 @@ export function requestRework(boardId: string, managerUser: AuthUser, commentTex
   const nextRev = board.revisionNumber + 1;
   const commentId = `comm_${crypto.randomUUID()}`;
   const reminderId = `rem_${crypto.randomUUID()}`;
+  const authorRole = managerUser.jobTitle || managerUser.roles[0] || 'Manager';
 
   goalsDb.transaction(() => {
     goalsDb.run(`
@@ -91,7 +100,7 @@ export function requestRework(boardId: string, managerUser: AuthUser, commentTex
       itemId || null,
       managerUser.id,
       managerUser.displayName,
-      managerUser.roles[0] || 'Manager Reviewer',
+      authorRole,
       commentText.trim(),
       now,
     ]);
@@ -118,16 +127,17 @@ export function requestRework(boardId: string, managerUser: AuthUser, commentTex
 }
 
 export function approveBoard(boardId: string, managerUser: AuthUser, note?: string): GoalBoard {
-  assertManagerOrAdmin(managerUser);
   const orgId = managerUser.orgId || 'org_default';
   const board = getBoardById(boardId, orgId);
+  assertManagerOrAdmin(managerUser, board);
 
   if (board.status !== 'SUBMITTED' && board.status !== 'REWORK_REQUESTED' && board.status !== 'LOCKED_OVERDUE' && board.status !== 'UNLOCK_REQUESTED') {
     throw new ValidationError(`Cannot approve board in status "${board.status}".`);
   }
 
   const now = Date.now();
-  const approverSignature = `${managerUser.displayName} (${managerUser.roles[0] || 'Engineering Lead'})`;
+  const approverRole = managerUser.jobTitle || managerUser.roles[0] || 'Manager';
+  const approverSignature = `${managerUser.displayName} (${approverRole})`;
 
   goalsDb.transaction(() => {
     goalsDb.run(`
@@ -146,11 +156,24 @@ export function approveBoard(boardId: string, managerUser: AuthUser, note?: stri
         boardId,
         managerUser.id,
         managerUser.displayName,
-        managerUser.roles[0] || 'Manager Reviewer',
+        approverRole,
         note.trim(),
         now,
       ]);
     }
+
+    const approvalRemId = `rem_${crypto.randomUUID()}`;
+    goalsDb.run(`
+      INSERT INTO reminders (id, org_id, user_id, board_id, type, message, due_date, is_dismissed, created_at)
+      VALUES (?, ?, ?, ?, 'BOARD_APPROVED', ?, null, 0, ?)
+    `, [
+      approvalRemId,
+      orgId,
+      board.ownerId,
+      boardId,
+      `${managerUser.displayName} approved your goal board "${board.title}"${note ? `: "${note.slice(0, 80)}"` : '.'}`,
+      now,
+    ]);
 
     goalsDb.run(`
       UPDATE reminders SET is_dismissed = 1 
@@ -191,7 +214,11 @@ export function requestBoardUnlock(boardId: string, user: AuthUser, reason?: str
       now,
     ]);
 
-    const targetManagerId = user.managerId || 'usr_all';
+    let targetManagerId: string = board.managerId || user.managerId || '';
+    if (!targetManagerId) {
+      const adminRow = goalsDb.query<{ id: string }, []>("SELECT id FROM users WHERE roles LIKE '%roles/admin%' OR roles LIKE '%roles/super_admin%' LIMIT 1").get();
+      targetManagerId = adminRow?.id || 'admin';
+    }
     goalsDb.run(`
       INSERT INTO reminders (id, org_id, user_id, board_id, type, message, due_date, is_dismissed, created_at)
       VALUES (?, ?, ?, ?, 'UNLOCK_REQUESTED', ?, null, 0, ?)
@@ -209,14 +236,15 @@ export function requestBoardUnlock(boardId: string, user: AuthUser, reason?: str
 }
 
 export function unlockBoard(boardId: string, managerUser: AuthUser, reason?: string): GoalBoard {
-  assertManagerOrAdmin(managerUser);
   const orgId = managerUser.orgId || 'org_default';
   const board = getBoardById(boardId, orgId);
+  assertManagerOrAdmin(managerUser, board);
 
   const now = Date.now();
   const commentId = `comm_${crypto.randomUUID()}`;
   const noteText = reason?.trim() || 'Board unlocked by manager for contributor editing.';
   const nextRev = board.revisionNumber + 1;
+  const unlockAuthorRole = managerUser.jobTitle || managerUser.roles[0] || 'Manager';
 
   goalsDb.transaction(() => {
     goalsDb.run(`
@@ -233,8 +261,21 @@ export function unlockBoard(boardId: string, managerUser: AuthUser, reason?: str
       boardId,
       managerUser.id,
       managerUser.displayName,
-      managerUser.roles[0] || 'Manager Reviewer',
+      unlockAuthorRole,
       `Unlocked for Editing: ${noteText}`,
+      now,
+    ]);
+
+    const unlockRemId = `rem_${crypto.randomUUID()}`;
+    goalsDb.run(`
+      INSERT INTO reminders (id, org_id, user_id, board_id, type, message, due_date, is_dismissed, created_at)
+      VALUES (?, ?, ?, ?, 'BOARD_UNLOCKED', ?, null, 0, ?)
+    `, [
+      unlockRemId,
+      orgId,
+      board.ownerId,
+      boardId,
+      `${managerUser.displayName} unlocked your goal board "${board.title}" for revisions: "${noteText.slice(0, 80)}"`,
       now,
     ]);
 
@@ -248,9 +289,9 @@ export function unlockBoard(boardId: string, managerUser: AuthUser, reason?: str
 }
 
 export function setSubmissionDeadline(boardId: string, managerUser: AuthUser, deadlineDate: string): GoalBoard {
-  assertManagerOrAdmin(managerUser);
   const orgId = managerUser.orgId || 'org_default';
   const board = getBoardById(boardId, orgId);
+  assertManagerOrAdmin(managerUser, board);
 
   if (!deadlineDate || !/^\d{4}-\d{2}-\d{2}$/.test(deadlineDate.trim())) {
     throw new ValidationError('A valid submission deadline date in YYYY-MM-DD format is required.');
@@ -259,6 +300,7 @@ export function setSubmissionDeadline(boardId: string, managerUser: AuthUser, de
   const now = Date.now();
   const commentId = `comm_${crypto.randomUUID()}`;
   const cleanDeadline = deadlineDate.trim();
+  const deadlineAuthorRole = managerUser.jobTitle || managerUser.roles[0] || 'Manager';
 
   goalsDb.transaction(() => {
     goalsDb.run(`
@@ -273,7 +315,7 @@ export function setSubmissionDeadline(boardId: string, managerUser: AuthUser, de
       boardId,
       managerUser.id,
       managerUser.displayName,
-      managerUser.roles[0] || 'Manager Reviewer',
+      deadlineAuthorRole,
       `Submission Deadline set to ${cleanDeadline}`,
       now,
     ]);
@@ -296,24 +338,48 @@ export function addReviewComment(boardId: string, user: AuthUser, commentText: s
   if (!commentText || commentText.trim().length === 0) {
     throw new ValidationError('Comment text is required.');
   }
+  if (commentText.length > 2000) {
+    throw new ValidationError('Comment exceeds maximum allowed length of 2000 characters.');
+  }
 
   const now = Date.now();
   const commentId = `comm_${crypto.randomUUID()}`;
-  const authorRole = user.id === board.ownerId ? 'Contributor' : (user.roles[0] || 'Reviewer');
+  const authorRole = user.id === board.ownerId ? (user.jobTitle || 'Contributor') : (user.jobTitle || user.roles[0] || 'Reviewer');
 
-  goalsDb.run(`
-    INSERT INTO review_comments (id, board_id, item_id, author_id, author_name, author_role, comment_text, type, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'FEEDBACK', ?)
-  `, [
-    commentId,
-    boardId,
-    itemId || null,
-    user.id,
-    user.displayName,
-    authorRole,
-    commentText.trim(),
-    now,
-  ]);
+  goalsDb.transaction(() => {
+    goalsDb.run(`
+      INSERT INTO review_comments (id, board_id, item_id, author_id, author_name, author_role, comment_text, type, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'FEEDBACK', ?)
+    `, [
+      commentId,
+      boardId,
+      itemId || null,
+      user.id,
+      user.displayName,
+      authorRole,
+      commentText.trim(),
+      now,
+    ]);
+
+    const recipientId: string = (user.id === board.ownerId
+      ? (board.managerId || user.managerId)
+      : board.ownerId) || '';
+
+    if (recipientId) {
+      const reminderId = `rem_${crypto.randomUUID()}`;
+      goalsDb.run(`
+        INSERT INTO reminders (id, org_id, user_id, board_id, type, message, due_date, is_dismissed, created_at)
+        VALUES (?, ?, ?, ?, 'FEEDBACK_RECEIVED', ?, null, 0, ?)
+      `, [
+        reminderId,
+        orgId,
+        recipientId,
+        boardId,
+        `${user.displayName} commented on "${board.title}": "${commentText.slice(0, 80)}${commentText.length > 80 ? '...' : ''}"`,
+        now,
+      ]);
+    }
+  })();
 
   return getBoardById(boardId, orgId);
 }

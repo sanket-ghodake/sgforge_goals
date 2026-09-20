@@ -63,6 +63,10 @@ case "$CMD" in
         echo "   $KEY"
         ;;
 
+    blast-radius|triage)
+        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/ops/blast-radius.ts" "$@"
+        ;;
+
     deploy-prod)
         echo "🚀 [${BRAND_NAME}] Deploying ${APP_NAME} in production mode..."
         docker compose -p "$COMPOSE_PROJECT_NAME" --env-file "$REPO_ROOT/.env" -f "$REPO_ROOT/docker/prod/docker-compose.yml" up -d --build

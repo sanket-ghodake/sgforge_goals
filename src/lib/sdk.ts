@@ -166,9 +166,7 @@ export function createLogger(service: string, logDir?: string): StandaloneLogger
   return new StandaloneLogger(service, logDir);
 }
 
-// ==============================================================================
 // 2. Standalone Dedicated Turso (libSQL/SQLite) Database Client
-// ==============================================================================
 /**
  * getDatabaseClient
  * @requirements [HLR-SDK-301] [LLR-SUB-001]
@@ -190,16 +188,19 @@ export function getDatabaseClient(dbFilename: string): Database {
   const db = new Database(dbPath, { create: true });
   db.run('PRAGMA journal_mode = WAL;');
   db.run('PRAGMA synchronous = NORMAL;');
+  db.run('PRAGMA busy_timeout = 5000;');
+  db.run('PRAGMA cache_size = -64000;');
+  db.run('PRAGMA mmap_size = 134217728;');
+  db.run('PRAGMA temp_store = MEMORY;');
   db.run('PRAGMA foreign_keys = ON;');
   return db;
 }
 
-// ==============================================================================
 // 3. Standalone RFC 7807 Safe Handler
-// ==============================================================================
 /**
  * createSafeHandler
- * @requirements [HLR-SDK-301] [LLR-SUB-001]
+ * Tech-Giant Grade RFC 7807 Error Boundary & Canonical Request Logger
+ * @requirements [HLR-SDK-301] [LLR-SUB-001] [LLR-GOALS-005]
  */
 export function createSafeHandler(
   serviceName: string,
@@ -209,30 +210,70 @@ export function createSafeHandler(
   const logger = createLogger(serviceName, logDir);
 
   return async (req: Request): Promise<Response> => {
+    const startTime = performance.now();
+    const traceId = req.headers.get('x-trace-id') || req.headers.get('traceparent')?.split('-')[1] || `trace_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const url = new URL(req.url);
+
     try {
-      return await handler(req);
+      const res = await handler(req);
+      const durationMs = performance.now() - startTime;
+
+      if (!res.headers.has('X-Trace-Id')) {
+        res.headers.set('X-Trace-Id', traceId);
+      }
+      if (!res.headers.has('traceparent')) {
+        res.headers.set('traceparent', `00-${traceId}-0000000000000001-01`);
+      }
+
+      const env = (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development';
+      const isNoise = url.pathname.includes('/assets/') || url.pathname === '/health';
+      if (!isNoise) {
+        const userId = req.headers.get('x-user-id') || undefined;
+        logger.info(`[${req.method}] ${url.pathname} -> ${res.status} (${durationMs.toFixed(2)}ms) trace=${traceId}`, {
+          type: 'CANONICAL_REQUEST',
+          env,
+          traceId,
+          method: req.method,
+          path: url.pathname,
+          status: res.status,
+          durationMs: Number(durationMs.toFixed(2)),
+          userId,
+        });
+      }
+
+      return res;
     } catch (err: any) {
-      const traceId = `trace_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      logger.error(`Unhandled exception in ${serviceName}: ${err?.message || err}`, {
-        traceId,
-        stack: err?.stack,
-      });
+      const durationMs = performance.now() - startTime;
+      const status = typeof err?.status === 'number' && err.status >= 400 && err.status < 600 ? err.status : 500;
+      const isClient = status >= 400 && status < 500;
+
+      if (isClient) {
+        logger.warn(`Operational error in ${serviceName}: ${err?.message || err}`, { traceId, status, code: err?.code, durationMs });
+      } else {
+        logger.error(`Unhandled exception in ${serviceName}: ${err?.message || err}`, { traceId, stack: err?.stack, durationMs });
+      }
+
+      const isDev = process.env.NODE_ENV === 'development';
+      const title = err?.name || (status === 500 ? 'Internal Server Error' : 'Request Error');
+      const detail = isClient ? (err?.message || 'Invalid request') : (isDev ? `Error: ${err?.message || err}` : 'An unexpected error occurred. Please contact system administrator with traceId.');
 
       return Response.json(
         {
-          type: 'https://forge.internal/errors/internal-server-error',
-          title: 'Internal Server Error',
-          status: 500,
-          detail: 'An unexpected error occurred. Please contact system administrator with traceId.',
+          type: err?.type || `https://forge.internal/errors/${err?.code?.toLowerCase().replace(/_/g, '-') || (status === 500 ? 'internal-server-error' : 'request-error')}`,
+          title,
+          status,
+          detail,
+          code: err?.code || (status === 500 ? 'INTERNAL_ERROR' : 'ERROR'),
           instance: req.url,
           traceId,
           timestamp: new Date().toISOString(),
         },
         {
-          status: 500,
+          status,
           headers: {
             'Content-Type': 'application/problem+json',
             'X-Trace-Id': traceId,
+            'traceparent': `00-${traceId}-0000000000000001-01`,
           },
         }
       );
@@ -291,10 +332,11 @@ export function authGuard(req: Request, options: AuthGuardOptions = {}): AuthGua
   const tokenMatch = cookieHeader.match(cookieRegex);
   const token = tokenMatch ? decodeURIComponent(tokenMatch[1]) : null;
 
-  // Header fallback
+  // Header & dev/test query fallback
   const authHeader = req.headers.get('authorization');
   const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  const effectiveToken = token || bearerToken;
+  const queryToken = (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') ? url.searchParams.get('token') : null;
+  const effectiveToken = token || bearerToken || queryToken;
 
   const defaultDevUser: AuthUser = {
     id: 'usr_anonymous',
@@ -337,42 +379,22 @@ export function authGuard(req: Request, options: AuthGuardOptions = {}): AuthGua
       const tokenResult = verifySessionToken(effectiveToken);
       if (!tokenResult.valid) {
         if (tokenResult.error === 'Invalid token algorithm: none') {
-          return {
-            authenticated: false,
-            response: new Response('401 Unauthorized: Invalid token algorithm', { status: 401 }),
-          };
-        }
-        if (tokenResult.error === 'Session token expired') {
-          const isApiReq = url.pathname.includes('/api/') || (req.headers.get('accept') || '').includes('application/json');
-          if (isApiReq) {
-            return {
-              authenticated: false,
-              response: new Response(JSON.stringify({ error: '401 Unauthorized: Session token expired', authenticated: false, code: 'TOKEN_EXPIRED' }), {
-                status: 401,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            };
-          }
-          if (process.env.STRICT_AUTH === 'true') {
-            return { authenticated: false, response: Response.redirect(defaultRedirect, 302) };
-          }
-          return { authenticated: false };
-        }
-        if (process.env.STRICT_AUTH === 'true') {
-          return {
-            authenticated: false,
-            response: new Response('401 Unauthorized: Invalid token signature', { status: 401 }),
-          };
+          return { authenticated: false, response: new Response('401 Unauthorized: Invalid token algorithm', { status: 401 }) };
         }
         const isApiReq = url.pathname.includes('/api/') || (req.headers.get('accept') || '').includes('application/json');
+        const isExpired = tokenResult.error === 'Session token expired';
         if (isApiReq) {
           return {
             authenticated: false,
-            response: new Response(JSON.stringify({ error: '401 Unauthorized: Invalid token signature', authenticated: false, code: 'TOKEN_INVALID' }), {
-              status: 401,
-              headers: { 'Content-Type': 'application/json' },
-            }),
+            response: new Response(JSON.stringify({
+              error: `401 Unauthorized: ${isExpired ? 'Session token expired' : 'Invalid token signature'}`,
+              authenticated: false,
+              code: isExpired ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID',
+            }), { status: 401, headers: { 'Content-Type': 'application/json' } }),
           };
+        }
+        if (process.env.STRICT_AUTH === 'true') {
+          return { authenticated: false, response: isExpired ? Response.redirect(defaultRedirect, 302) : new Response('401 Unauthorized: Invalid token signature', { status: 401 }) };
         }
         return { authenticated: false };
       }
@@ -456,33 +478,14 @@ export {
   fetchEmployeesList,
   getScopedHierarchy,
   checkEmployeeIsManager,
+  checkSubordinateManagers,
 } from './directory-client';
 
-const SENSITIVE_KEY_REGEX = /pass(word)?|token|secret|auth|bearer|credential|key/i;
-const BEARER_REGEX = /Bearer\s+([A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*)/gi;
+export {
+  redactSensitiveData,
+  extractOrGenerateTraceId,
+  emitCanonicalRequestLog,
+  ingestBrowserTelemetry,
+  parseBlastRadius,
+} from './telemetry';
 
-/**
- * redactSensitiveData
- * @requirements [HLR-SDK-301] [LLR-SUB-001]
- */
-export function redactSensitiveData(data: unknown, depth = 0): unknown {
-  if (depth > 6 || data === null || data === undefined) return data;
-  if (typeof data === 'string') return data.replace(BEARER_REGEX, 'Bearer [REDACTED]');
-  if (Array.isArray(data)) return data.map((item) => redactSensitiveData(item, depth + 1));
-  if (typeof data === 'object') {
-    const sanitized: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(data as Record<string, unknown>)) {
-      if (SENSITIVE_KEY_REGEX.test(key)) {
-        sanitized[key] = '[REDACTED]';
-      } else if (typeof val === 'object' && val !== null) {
-        sanitized[key] = redactSensitiveData(val, depth + 1);
-      } else if (typeof val === 'string') {
-        sanitized[key] = val.replace(BEARER_REGEX, 'Bearer [REDACTED]');
-      } else {
-        sanitized[key] = val;
-      }
-    }
-    return sanitized;
-  }
-  return data;
-}

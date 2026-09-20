@@ -17,6 +17,10 @@ export interface AuthUser {
   managerEmail?: string | null;
   jobTitle?: string | null;
   employeeCode?: string | null;
+  hasManagerAbove?: boolean;
+  directReportsCount?: number;
+  subordinateManagersCount?: number;
+  isManagerInDirectory?: boolean;
 }
 
 export interface UserRow {
@@ -123,6 +127,7 @@ export interface GoalBoard {
   ownerName: string;
   ownerEmail: string;
   ownerDepartment: string;
+  managerId?: string | null;
   managerName?: string | null;
   title: string;
   cycle: string;
@@ -140,7 +145,7 @@ export interface GoalBoard {
   comments?: ReviewComment[];
 }
 
-export type ReviewCommentType = 'FEEDBACK' | 'REWORK_REQUEST' | 'APPROVAL_NOTE' | 'UNLOCK_REQUEST' | 'DEADLINE_SET' | 'UNLOCKED';
+export type ReviewCommentType = 'FEEDBACK' | 'REWORK_REQUEST' | 'APPROVAL_NOTE' | 'UNLOCK_REQUEST' | 'DEADLINE_SET' | 'UNLOCKED' | 'SUBMISSION' | 'BOARD_CREATED';
 
 export interface ReviewComment {
   id: string;
@@ -154,7 +159,7 @@ export interface ReviewComment {
   createdAt: number;
 }
 
-export type ReminderType = 'SUBMISSION_DUE' | 'PENDING_APPROVAL' | 'REWORK_REQUIRED' | 'UNLOCK_REQUESTED';
+export type ReminderType = 'SUBMISSION_DUE' | 'PENDING_APPROVAL' | 'REWORK_REQUIRED' | 'UNLOCK_REQUESTED' | 'FEEDBACK_RECEIVED' | 'BOARD_APPROVED' | 'BOARD_UNLOCKED';
 
 export interface Reminder {
   id: string;

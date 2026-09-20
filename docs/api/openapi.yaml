@@ -2,44 +2,46 @@ openapi: 3.1.0
 info:
   title: Individual Goal Center API
   version: 1.0.0
-  description: Autonomous microservice API specification with RFC 7807 problem responses.
+  description: Autonomous microservice API specification for individual performance goal setting, review conductor, and milestone tracking.
 servers:
   - url: /
     description: Direct or reverse-proxied microservice root
 tags:
   - name: Health
     description: Service vitality and database connectivity probes
+  - name: Auth
+    description: Authentication, session introspection, and identity discovery
+  - name: Organization
+    description: Employee roster and leadership clearance verification
+  - name: Projects
+    description: Strategic projects and alignment categories
+  - name: GoalBoards
+    description: Goal board lifecycle, submission, and milestone management
+  - name: Reviews
+    description: Managerial review decisions, rework flows, and feedback threads
+  - name: Reminders
+    description: Operational reminders and notifications
   - name: Telemetry
-    description: Structured telemetry and client logging bridge
+    description: Structured browser telemetry and error reporting
 paths:
   /health:
     get:
       summary: Microservice Health Probe
-      description: Returns health status, timestamp, uptime, and database connectivity.
+      description: Returns service vitality, database connectivity, memory usage, and uptime.
       operationId: getHealth
       tags:
         - Health
       responses:
         '200':
-          description: Service is healthy and database is connected.
+          description: Service is healthy.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: ok
-                  service:
-                    type: string
-                    example: app-goals
-                  timestamp:
-                    type: string
-                    format: date-time
+                $ref: '#/components/schemas/HealthResponse'
   /api/logs/browser:
     post:
       summary: Browser Telemetry Log Bridge
-      description: Centralized endpoint for reporting client-side errors and warnings.
+      description: Ingests client-side errors and warnings into structured JSON logs.
       operationId: reportBrowserLog
       tags:
         - Telemetry
@@ -49,12 +51,621 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - severity
+                - message
               properties:
                 severity:
                   type: string
                   enum: [info, warn, error]
                 message:
                   type: string
+                payload:
+                  type: object
       responses:
         '200':
-          description: Log successfully ingested into structured JSON logs.
+          description: Log ingested successfully.
+  /api/auth/me:
+    get:
+      summary: Get Current Authenticated User Profile
+      description: Returns enriched user identity, reporting chain, and managerial clearance.
+      operationId: getCurrentUser
+      tags:
+        - Auth
+      responses:
+        '200':
+          description: Current user profile.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  user:
+                    $ref: '#/components/schemas/AuthUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/auth/users:
+    get:
+      summary: List Local Users
+      description: Returns all users registered in the local database.
+      operationId: listUsers
+      tags:
+        - Auth
+      responses:
+        '200':
+          description: Collection of users.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuthUser'
+  /api/org/employees:
+    get:
+      summary: List Organization Employees
+      description: Discovers employees from Central Directory or local database cache.
+      operationId: listEmployees
+      tags:
+        - Organization
+      responses:
+        '200':
+          description: Employee roster.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuthUser'
+                  total:
+                    type: integer
+  /api/org/manager-check:
+    get:
+      summary: Check Managerial Status
+      description: Returns verified managerial clearance and subordinate counts.
+      operationId: checkManagerStatus
+      tags:
+        - Organization
+      responses:
+        '200':
+          description: Clearance confirmation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  userId:
+                    type: string
+                  hasManagerAbove:
+                    type: boolean
+                  directReportsCount:
+                    type: integer
+                  subordinateManagersCount:
+                    type: integer
+                  isManagerInDirectory:
+                    type: boolean
+  /api/projects:
+    get:
+      summary: List Projects
+      description: Lists strategic projects associated with the current organization tenant.
+      operationId: listProjects
+      tags:
+        - Projects
+      responses:
+        '200':
+          description: Collection of projects.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+    post:
+      summary: Create Project
+      description: Registers a new strategic project code.
+      operationId: createProject
+      tags:
+        - Projects
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - code
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Project created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+  /api/boards:
+    get:
+      summary: List Goal Boards
+      description: Lists goal boards within the tenant filtered by user clearance and scope.
+      operationId: listBoards
+      tags:
+        - GoalBoards
+      responses:
+        '200':
+          description: Collection of goal boards.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GoalBoard'
+    post:
+      summary: Create Goal Board
+      description: Initializes a new goal board in DRAFT status.
+      operationId: createBoard
+      tags:
+        - GoalBoards
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - projectId
+                - cycle
+              properties:
+                title:
+                  type: string
+                projectId:
+                  type: string
+                cycle:
+                  type: string
+      responses:
+        '201':
+          description: Goal board created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalBoard'
+  /api/boards/{id}:
+    get:
+      summary: Get Goal Board By ID
+      description: Returns a single goal board complete with milestones and sanitized review history.
+      operationId: getBoardById
+      tags:
+        - GoalBoards
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Hydrated goal board.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalBoard'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/boards/{id}/items:
+    put:
+      summary: Replace Goal Board Milestones
+      description: Updates milestones and validates that weights sum to exactly 100%. Rejects mutations if locked.
+      operationId: updateGoalItems
+      tags:
+        - GoalBoards
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/GoalItemInput'
+      responses:
+        '200':
+          description: Updated goal board.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalBoard'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '423':
+          $ref: '#/components/responses/Locked'
+  /api/boards/{id}/items/{itemId}/progress:
+    patch:
+      summary: Update Milestone Progress
+      description: Updates progress percentage and completion status during execution phase.
+      operationId: updateItemProgress
+      tags:
+        - GoalBoards
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - progressPercent
+              properties:
+                progressPercent:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                status:
+                  type: string
+                  enum: [PENDING, IN_PROGRESS, COMPLETED, BLOCKED]
+      responses:
+        '200':
+          description: Updated goal board.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalBoard'
+  /api/boards/{id}/submit:
+    post:
+      summary: Submit Goal Board For Review
+      description: Locks the board and transitions status to SUBMITTED.
+      operationId: submitBoard
+      tags:
+        - GoalBoards
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Board submitted and locked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalBoard'
+        '423':
+          $ref: '#/components/responses/Locked'
+  /api/boards/{id}/review:
+    post:
+      summary: Execute Review Decision
+      description: Processes manager decisions (APPROVE, REWORK, UNLOCK, SET_DEADLINE) or contributor unlock requests.
+      operationId: executeReviewDecision
+      tags:
+        - Reviews
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - decision
+              properties:
+                decision:
+                  type: string
+                  enum: [APPROVE, REWORK, REQUEST_UNLOCK, UNLOCK, SET_DEADLINE]
+                comment:
+                  type: string
+                itemId:
+                  type: string
+                deadline:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Updated goal board.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalBoard'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/boards/{id}/comments:
+    post:
+      summary: Add Review Comment
+      description: Appends feedback to the review thread of a goal board or milestone item.
+      operationId: addReviewComment
+      tags:
+        - Reviews
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - commentText
+              properties:
+                commentText:
+                  type: string
+                itemId:
+                  type: string
+      responses:
+        '200':
+          description: Updated goal board with new comment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalBoard'
+  /api/reminders:
+    get:
+      summary: List Active Reminders
+      description: Returns active notifications and review alerts for current user.
+      operationId: listReminders
+      tags:
+        - Reminders
+      responses:
+        '200':
+          description: Collection of reminders.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Reminder'
+  /api/reminders/{id}/dismiss:
+    post:
+      summary: Dismiss Reminder
+      description: Marks a reminder notification as dismissed.
+      operationId: dismissReminder
+      tags:
+        - Reminders
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reminder dismissed.
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        service:
+          type: string
+          example: goals
+        livez:
+          type: boolean
+        readyz:
+          type: boolean
+        uptime:
+          type: number
+        memoryMb:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        displayName:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        department:
+          type: string
+        managerId:
+          type: string
+          nullable: true
+        managerName:
+          type: string
+          nullable: true
+        jobTitle:
+          type: string
+          nullable: true
+        employeeCode:
+          type: string
+          nullable: true
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+        managerId:
+          type: string
+        createdAt:
+          type: integer
+    GoalBoard:
+      type: object
+      properties:
+        id:
+          type: string
+        orgId:
+          type: string
+        projectId:
+          type: string
+        ownerId:
+          type: string
+        ownerName:
+          type: string
+        title:
+          type: string
+        cycle:
+          type: string
+        status:
+          type: string
+          enum: [DRAFT, SUBMITTED, APPROVED, REWORK_REQUESTED, UNLOCK_REQUESTED, LOCKED_OVERDUE, COMPLETED, ARCHIVED]
+        lockVersion:
+          type: integer
+        revisionNumber:
+          type: integer
+        submissionDeadline:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GoalItem'
+    GoalItem:
+      type: object
+      properties:
+        id:
+          type: string
+        boardId:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: [DELIVERABLE, METRIC, LEARNING]
+        targetDate:
+          type: string
+        weight:
+          type: integer
+        progressPercent:
+          type: integer
+        status:
+          type: string
+          enum: [PENDING, IN_PROGRESS, COMPLETED]
+    GoalItemInput:
+      type: object
+      required:
+        - title
+        - weight
+        - targetDate
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: [DELIVERABLE, METRIC, LEARNING]
+        targetDate:
+          type: string
+        weight:
+          type: integer
+          minimum: 1
+          maximum: 100
+    Reminder:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [SUBMISSION_DUE, PENDING_APPROVAL, REWORK_REQUIRED, UNLOCK_REQUESTED, FEEDBACK_RECEIVED, BOARD_APPROVED, BOARD_UNLOCKED]
+        message:
+          type: string
+        boardId:
+          type: string
+        createdAt:
+          type: integer
+    ProblemDetails:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        code:
+          type: string
+        instance:
+          type: string
+        traceId:
+          type: string
+  responses:
+    Unauthorized:
+      description: Authentication required or invalid session token.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Forbidden:
+      description: Insufficient permissions or segregation of duties violation.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    NotFound:
+      description: Requested resource was not found.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Locked:
+      description: Resource is locked against editing in current state.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    ValidationError:
+      description: Input validation failed (e.g. weights do not sum to 100%).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'

@@ -7,106 +7,27 @@
 import { join } from 'node:path';
 import {
   authGuard,
-  checkEmployeeIsManager,
   createLogger,
   createSafeHandler,
-  fetchEmployeeHierarchy,
   fetchEmployeesList,
+  ingestBrowserTelemetry,
 } from './lib/sdk';
 import { handleDocsRoute } from './lib/docs-viewer';
-import { cleanDisplayName } from './lib/ui';
 import type { AuthUser } from './lib/types';
 import { renderLayout } from './frontend/views/layout';
-import { renderDashboardView } from './frontend/views/dashboard-view';
-import { renderBoardsView } from './frontend/views/boards-view';
-import { renderBoardView } from './frontend/views/board-view';
-import { renderManagerView } from './frontend/views/manager-view';
-import { renderExploreView } from './frontend/views/explore-view';
+import { getLayoutStyles } from './frontend/views/layout-styles';
+import { getAstryxStyles } from './lib/ui';
 import { renderLeadershipRestrictedView, renderLoginView } from './frontend/views/login-view';
-import { getUserById, isLocalManager, listUsers, upsertUser } from './db';
+import { listUsers } from './db';
 import { createBoard, createProjectRecord, getBoardById, listBoards, listProjects, submitBoard, updateGoalItems, updateItemProgress } from './backend/services/board-service';
 import { approveBoard, addReviewComment, requestRework, requestBoardUnlock, unlockBoard, setSubmissionDeadline } from './backend/services/review-service';
 import { dismissReminder, listUserReminders } from './backend/services/reminder-service';
+import { getCachedManagerStatus, resolveViewContent, syncEmployeeProfile } from './server-helpers';
 
 const LOG_DIR = join(import.meta.dir, '..', 'logs');
 const DOCS_DIR = join(import.meta.dir, '..', 'docs');
 const logger = createLogger('goals', LOG_DIR);
 const PORT = Number(process.env.PORT || 8090);
-
-const profileCache = new Map<string, { user: AuthUser; timestamp: number }>();
-const PROFILE_TTL_MS = 5 * 60 * 1000; // 5-minute TTL
-
-async function syncEmployeeProfile(baseUser: AuthUser, req?: Request): Promise<AuthUser> {
-  if (!baseUser || !baseUser.id) return baseUser;
-
-  const cached = profileCache.get(baseUser.id);
-  if (cached && Date.now() - cached.timestamp < PROFILE_TTL_MS) {
-    return cached.user;
-  }
-
-  const localUser = getUserById(baseUser.id);
-
-  try {
-    const searchParam = baseUser.email || baseUser.id;
-    const empRoster = await fetchEmployeesList({ search: searchParam, incomingReq: req });
-    let match: any = null;
-
-    if (empRoster && empRoster.items && empRoster.items.length > 0) {
-      match = empRoster.items.find((i: any) =>
-        i.id === baseUser.id ||
-        (baseUser.email && i.email?.toLowerCase() === baseUser.email.toLowerCase())
-      ) || empRoster.items[0];
-    }
-
-    const effectiveId = match?.id || baseUser.id;
-    const hierarchy = await fetchEmployeeHierarchy(effectiveId, { incomingReq: req });
-
-    if ((hierarchy && hierarchy.user) || match) {
-      const primaryMgr = hierarchy?.managementChain && hierarchy.managementChain.length > 0
-        ? hierarchy.managementChain[0]
-        : null;
-
-      const department = match?.department_name || 
-        baseUser.department || 
-        localUser?.department || 
-        'General';
-
-      const jobTitle = match?.job_title || baseUser.jobTitle || localUser?.jobTitle || (primaryMgr ? 'Team Member' : 'Lead');
-      const employeeCode = match?.employee_code || baseUser.employeeCode || localUser?.employeeCode || null;
-      const managerId = primaryMgr?.id || match?.manager_id || localUser?.managerId || null;
-      const managerName = primaryMgr?.display_name || match?.manager_name || localUser?.managerName || null;
-      const managerEmail = primaryMgr?.email || match?.manager_email || localUser?.managerEmail || null;
-
-      const enriched: AuthUser = {
-        id: baseUser.id,
-        email: match?.email || hierarchy?.user?.email || baseUser.email,
-        displayName: cleanDisplayName(match?.display_name || hierarchy?.user?.display_name || baseUser.displayName),
-        roles: baseUser.roles && baseUser.roles.length > 0 ? baseUser.roles : ['roles/employee'],
-        department,
-        orgId: match?.org_id || baseUser.orgId || 'org_default',
-        managerId,
-        managerName: cleanDisplayName(primaryMgr?.display_name || match?.manager_name || localUser?.managerName || null) || null,
-        managerEmail,
-        jobTitle,
-        employeeCode,
-      };
-
-      const saved = upsertUser(enriched);
-      profileCache.set(baseUser.id, { user: saved, timestamp: Date.now() });
-      return saved;
-    }
-  } catch (err) {
-    logger.warn('Failed to sync employee profile with Central Directory:', { error: String(err) });
-  }
-
-  if (localUser) {
-    profileCache.set(baseUser.id, { user: localUser, timestamp: Date.now() });
-    return localUser;
-  }
-  const saved = upsertUser(baseUser);
-  profileCache.set(baseUser.id, { user: saved, timestamp: Date.now() });
-  return saved;
-}
 
 async function getEffectiveUser(baseUser: AuthUser, req: Request): Promise<AuthUser> {
   if (baseUser && baseUser.id) {
@@ -126,34 +47,6 @@ async function getEffectiveUser(baseUser: AuthUser, req: Request): Promise<AuthU
   };
 }
 
-function resolveViewContent(tabParam: string, boardIdParam: string | null, user: AuthUser, orgId: string) {
-  const allBoards = listBoards(orgId);
-  const allProjects = listProjects(orgId);
-
-  let contentHtml = '';
-  let activeTab: string = tabParam;
-
-  if (tabParam === 'board' && boardIdParam) {
-    const board = getBoardById(boardIdParam, orgId);
-    contentHtml = renderBoardView(user, board);
-    activeTab = 'board';
-  } else if (tabParam === 'boards') {
-    contentHtml = renderBoardsView(user, allBoards, allProjects);
-    activeTab = 'boards';
-  } else if (tabParam === 'reviews') {
-    contentHtml = renderManagerView(user, allBoards, allProjects);
-    activeTab = 'reviews';
-  } else if (tabParam === 'explore') {
-    contentHtml = renderExploreView(user, allBoards);
-    activeTab = 'explore';
-  } else {
-    contentHtml = renderDashboardView(user, allBoards, allProjects);
-    activeTab = 'dashboard';
-  }
-
-  return { contentHtml, activeTab, allBoards, allProjects };
-}
-
 export function startgoalsServer(portOverride?: number) {
   const activePort = portOverride !== undefined ? portOverride : PORT;
 
@@ -162,6 +55,17 @@ export function startgoalsServer(portOverride?: number) {
     fetch: createSafeHandler('goals', async (req: Request): Promise<Response> => {
       const url = new URL(req.url);
       const pathname = url.pathname;
+
+      // 0. Static Asset Route (Immutable CSS Caching for 10k users bandwidth optimization)
+      if (pathname === '/assets/app.css' || pathname.endsWith('/assets/app.css')) {
+        return new Response(`${getLayoutStyles()}\n${getAstryxStyles()}`, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/css; charset=utf-8',
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          },
+        });
+      }
 
       // 1. Health Probe
       if (pathname === '/health' || pathname === '/apps/goals/health') {
@@ -187,9 +91,24 @@ export function startgoalsServer(portOverride?: number) {
         return docsRes || new Response('Docs Not Found', { status: 404 });
       }
 
-      // 3. Telemetry Log Bridge
+      // 3. Telemetry Log Bridge (Ingests Real User Monitoring & client breadcrumbs)
       if (pathname.endsWith('/api/logs/browser')) {
-        return new Response(JSON.stringify({ status: 'received' }), {
+        if (req.method === 'POST') {
+          try {
+            const body = await req.json();
+            ingestBrowserTelemetry(logger, body, req);
+            return new Response(JSON.stringify({ status: 'received', traceId: body?.traceId || req.headers.get('x-trace-id') }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          } catch (e: any) {
+            return new Response(JSON.stringify({ status: 'error', error: e?.message || 'Invalid telemetry payload' }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+        }
+        return new Response(JSON.stringify({ status: 'ready' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
@@ -250,13 +169,8 @@ export function startgoalsServer(portOverride?: number) {
 
       let isVerifiedManager = hasDirectRole;
       if (!isVerifiedManager) {
-        // Query SG Forge dedicated endpoint: GET /api/v1/auth/hierarchy/:id/is-manager
-        const managerCheck = await checkEmployeeIsManager(auth.user.id, { incomingReq: req });
-        if (managerCheck && managerCheck.isManager) {
-          isVerifiedManager = true;
-          auth.user.roles = Array.from(new Set([...baseRoles, 'roles/manager']));
-        } else if (isLocalManager(auth.user.id)) {
-          isVerifiedManager = true;
+        isVerifiedManager = await getCachedManagerStatus(auth.user.id, req);
+        if (isVerifiedManager) {
           auth.user.roles = Array.from(new Set([...baseRoles, 'roles/manager']));
         }
       }
@@ -294,16 +208,21 @@ export function startgoalsServer(portOverride?: number) {
       if (pathname.endsWith('/api/org/employees') && req.method === 'GET') {
         const centralList = await fetchEmployeesList({ incomingReq: req });
         if (centralList && centralList.items) {
-          return new Response(JSON.stringify(centralList), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
+          return new Response(JSON.stringify(centralList), { status: 200, headers: { 'Content-Type': 'application/json' } });
         }
         const users = listUsers();
-        return new Response(JSON.stringify({ ok: true, items: users, total: users.length, departments: [] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        return new Response(JSON.stringify({ ok: true, items: users, total: users.length, departments: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (pathname.endsWith('/api/org/manager-check') && req.method === 'GET') {
+        return new Response(JSON.stringify({
+          ok: true,
+          userId: user.id,
+          hasManagerAbove: user.hasManagerAbove ?? Boolean(user.managerId || user.managerName),
+          directReportsCount: user.directReportsCount ?? 0,
+          subordinateManagersCount: user.subordinateManagersCount ?? 0,
+          isManagerInDirectory: user.isManagerInDirectory ?? false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
 
       // 6. REST API Endpoints
@@ -432,11 +351,7 @@ export function startgoalsServer(portOverride?: number) {
 
         const { contentHtml, activeTab } = resolveViewContent(tabParam, boardIdParam, user, orgId);
 
-        return new Response(JSON.stringify({
-          html: contentHtml,
-          activeTab,
-          title: activeTab,
-        }), {
+        return new Response(JSON.stringify({ html: contentHtml, activeTab, title: activeTab }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
@@ -449,17 +364,8 @@ export function startgoalsServer(portOverride?: number) {
 
       const { contentHtml, activeTab } = resolveViewContent(tabParam, boardIdParam, user, orgId);
 
-      const fullHtml = renderLayout({
-        activeTab: activeTab as any,
-        user,
-        reminders,
-        contentHtml,
-      });
-
-      return new Response(fullHtml, {
-        status: 200,
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-      });
+      const fullHtml = renderLayout({ activeTab: activeTab as any, user, reminders, contentHtml });
+      return new Response(fullHtml, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }, LOG_DIR),
   });
 

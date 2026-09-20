@@ -4,7 +4,7 @@
  * @requirements [HLR-GOALS-001] [LLR-GOALS-001] [LLR-GOALS-002]
  */
 
-import { goalsDb } from '../../db';
+import { goalsDb, upsertUser } from '../../db';
 import type { AuthUser, CreateBoardInput, GoalBoard, GoalBoardRow, GoalItem, GoalItemRow, Project, ProjectRow, UpdateGoalItemsInput } from '../../lib/types';
 
 export class BoardLockedError extends Error {
@@ -28,6 +28,21 @@ export class NotFoundError extends Error {
   constructor(message: string) { super(message); this.name = 'NotFoundError'; }
 }
 
+export function getCycleDefaultTargetDate(cycle?: string): string {
+  const now = new Date();
+  if (cycle && /^\d{4}-Q[1-4]$/.test(cycle.trim())) {
+    const [yearStr, qStr] = cycle.trim().split('-Q');
+    const year = parseInt(yearStr, 10);
+    const q = parseInt(qStr, 10);
+    const endMonth = q * 3;
+    const lastDay = new Date(year, endMonth, 0).getDate();
+    return `${year}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  }
+  const endMonth = Math.floor(now.getMonth() / 3) * 3 + 3;
+  const lastDay = new Date(now.getFullYear(), endMonth, 0).getDate();
+  return `${now.getFullYear()}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+}
+
 export function listProjects(orgId: string): Project[] {
   return goalsDb.query<ProjectRow, [string]>('SELECT * FROM projects WHERE org_id = ? ORDER BY name ASC').all(orgId).map(p => ({
     id: p.id,
@@ -42,7 +57,7 @@ export function listProjects(orgId: string): Project[] {
 
 export function listBoards(orgId: string, filter?: { ownerId?: string; projectId?: string; cycle?: string }): GoalBoard[] {
   let query = `
-    SELECT b.*, p.name as project_name, u.manager_name as manager_name
+    SELECT b.*, p.name as project_name, u.manager_name as manager_name, u.manager_id as manager_id
     FROM goal_boards b 
     LEFT JOIN projects p ON b.project_id = p.id 
     LEFT JOIN users u ON b.owner_id = u.id
@@ -65,7 +80,7 @@ export function listBoards(orgId: string, filter?: { ownerId?: string; projectId
 
   query += ' ORDER BY b.updated_at DESC';
 
-  const rows = goalsDb.query<GoalBoardRow & { manager_name?: string }, any[]>(query).all(...params);
+  const rows = goalsDb.query<GoalBoardRow & { manager_name?: string; manager_id?: string }, any[]>(query).all(...params);
   const boardIds = rows.map(r => r.id);
   const itemsByBoardId: Record<string, GoalItem[]> = {};
 
@@ -76,22 +91,11 @@ export function listBoards(orgId: string, filter?: { ownerId?: string; projectId
     `).all(...boardIds);
 
     allItems.forEach(i => {
-      const item: GoalItem = {
-        id: i.id,
-        boardId: i.board_id,
-        title: i.title,
-        description: i.description,
-        category: i.category,
-        targetDate: i.target_date,
-        weight: i.weight,
-        progressPercent: i.progress_percent,
-        status: i.status,
-        sortOrder: i.sort_order,
-        createdAt: i.created_at,
-        updatedAt: i.updated_at,
-      };
-      if (!itemsByBoardId[i.board_id]) itemsByBoardId[i.board_id] = [];
-      itemsByBoardId[i.board_id].push(item);
+      (itemsByBoardId[i.board_id] ??= []).push({
+        id: i.id, boardId: i.board_id, title: i.title, description: i.description, category: i.category,
+        targetDate: i.target_date, weight: i.weight, progressPercent: i.progress_percent, status: i.status,
+        sortOrder: i.sort_order, createdAt: i.created_at, updatedAt: i.updated_at,
+      });
     });
   }
 
@@ -104,6 +108,7 @@ export function listBoards(orgId: string, filter?: { ownerId?: string; projectId
     ownerName: r.owner_name,
     ownerEmail: r.owner_email,
     ownerDepartment: r.owner_department,
+    managerId: r.manager_id || null,
     managerName: r.manager_name || r.approved_by || null,
     title: r.title,
     cycle: r.cycle,
@@ -151,7 +156,7 @@ export function createProjectRecord(project: {
 
 export function getBoardById(boardId: string, orgId: string, requestingUser?: AuthUser): GoalBoard {
   const row = goalsDb.query<any, [string, string]>(`
-    SELECT b.*, p.name as project_name, u.manager_name as manager_name
+    SELECT b.*, p.name as project_name, u.manager_name as manager_name, u.manager_id as manager_id
     FROM goal_boards b 
     LEFT JOIN projects p ON b.project_id = p.id 
     LEFT JOIN users u ON b.owner_id = u.id
@@ -180,18 +185,9 @@ export function getBoardById(boardId: string, orgId: string, requestingUser?: Au
   const items = goalsDb.query<any, [string]>(`
     SELECT * FROM goal_items WHERE board_id = ? ORDER BY sort_order ASC, created_at ASC
   `).all(boardId).map(i => ({
-    id: i.id,
-    boardId: i.board_id,
-    title: i.title,
-    description: i.description,
-    category: i.category,
-    targetDate: i.target_date,
-    weight: i.weight,
-    progressPercent: i.progress_percent,
-    status: i.status,
-    sortOrder: i.sort_order,
-    createdAt: i.created_at,
-    updatedAt: i.updated_at,
+    id: i.id, boardId: i.board_id, title: i.title, description: i.description, category: i.category,
+    targetDate: i.target_date, weight: i.weight, progressPercent: i.progress_percent, status: i.status,
+    sortOrder: i.sort_order, createdAt: i.created_at, updatedAt: i.updated_at,
   }));
 
   const rawComments = allowedTimeline ? goalsDb.query<any, [string]>(`
@@ -199,15 +195,8 @@ export function getBoardById(boardId: string, orgId: string, requestingUser?: Au
   `).all(boardId) : [];
 
   const comments = rawComments.map(c => ({
-    id: c.id,
-    boardId: c.board_id,
-    itemId: c.item_id,
-    authorId: c.author_id,
-    authorName: c.author_name,
-    authorRole: c.author_role,
-    commentText: c.comment_text,
-    type: c.type,
-    createdAt: c.created_at,
+    id: c.id, boardId: c.board_id, itemId: c.item_id, authorId: c.author_id, authorName: c.author_name,
+    authorRole: c.author_role, commentText: c.comment_text, type: c.type, createdAt: c.created_at,
   }));
 
   return {
@@ -219,6 +208,7 @@ export function getBoardById(boardId: string, orgId: string, requestingUser?: Au
     ownerName: row.owner_name,
     ownerEmail: row.owner_email,
     ownerDepartment: row.owner_department,
+    managerId: row.manager_id || null,
     managerName: row.manager_name || row.approved_by || null,
     title: row.title,
     cycle: row.cycle,
@@ -280,6 +270,10 @@ export function createBoard(input: CreateBoardInput, user: AuthUser): GoalBoard 
     throw new NotFoundError('Selected project not found in this organization.');
   }
 
+  if (user && user.id) {
+    try { upsertUser(user); } catch (_) {}
+  }
+
   goalsDb.run(`
     INSERT INTO goal_boards (id, org_id, project_id, owner_id, owner_name, owner_email, owner_department, title, cycle, status, lock_version, revision_number, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', 1, 1, ?, ?)
@@ -297,19 +291,20 @@ export function createBoard(input: CreateBoardInput, user: AuthUser): GoalBoard 
     now,
   ]);
 
-  const defaultTargetDate = (() => {
-    const d = new Date();
-    const qEnd = [2, 5, 8, 11];
-    const qDays = [31, 30, 30, 31];
-    const q = Math.floor(d.getMonth() / 3);
-    return `${d.getFullYear()}-${String(qEnd[q] + 1).padStart(2, '0')}-${qDays[q]}`;
-  })();
+  const defaultTargetDate = getCycleDefaultTargetDate(input.cycle);
 
   // Insert an initial starter milestone
   goalsDb.run(`
     INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, created_at, updated_at)
     VALUES (?, ?, 'Define initial milestone deliverables', 'Outline project deliverables and target verification metrics.', 'DELIVERABLE', ?, 100, 0, 'PENDING', 1, ?, ?)
   `, [`item_${id}_1`, id, defaultTargetDate, now, now]);
+
+  // Persist BOARD_CREATED activity in timeline
+  const createCommId = `comm_${crypto.randomUUID()}`;
+  goalsDb.run(`
+    INSERT INTO review_comments (id, board_id, item_id, author_id, author_name, author_role, comment_text, type, created_at)
+    VALUES (?, ?, null, ?, ?, ?, ?, 'BOARD_CREATED', ?)
+  `, [createCommId, id, user.id, user.displayName, user.jobTitle || 'Contributor', `Goal Board created for ${project.name} (${input.cycle.trim()}).`, now]);
 
   return getBoardById(id, orgId);
 }
@@ -343,35 +338,18 @@ export function updateGoalItems(boardId: string, input: UpdateGoalItemsInput, us
           SET title = ?, description = ?, category = ?, target_date = ?, weight = ?, progress_percent = ?, status = ?, sort_order = ?, updated_at = ?
           WHERE id = ? AND board_id = ?
         `, [
-          item.title.trim(),
-          item.description?.trim() || '',
-          item.category || 'DELIVERABLE',
-          item.targetDate || '2026-03-31',
-          sanitizedWeight,
-          sanitizedProgress,
-          item.status || 'PENDING',
-          index + 1,
-          now,
-          itemId,
-          boardId,
+          item.title.trim(), item.description?.trim() || '', item.category || 'DELIVERABLE',
+          item.targetDate || getCycleDefaultTargetDate(board.cycle), sanitizedWeight, sanitizedProgress,
+          item.status || 'PENDING', index + 1, now, itemId, boardId,
         ]);
       } else {
         goalsDb.run(`
           INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
-          itemId,
-          boardId,
-          item.title.trim(),
-          item.description?.trim() || '',
-          item.category || 'DELIVERABLE',
-          item.targetDate || '2026-03-31',
-          sanitizedWeight,
-          sanitizedProgress,
-          item.status || 'PENDING',
-          index + 1,
-          now,
-          now,
+          itemId, boardId, item.title.trim(), item.description?.trim() || '', item.category || 'DELIVERABLE',
+          item.targetDate || getCycleDefaultTargetDate(board.cycle), sanitizedWeight, sanitizedProgress,
+          item.status || 'PENDING', index + 1, now, now,
         ]);
       }
     });
@@ -420,7 +398,11 @@ export function submitBoard(boardId: string, user: AuthUser): GoalBoard {
       WHERE id = ?
     `, [now, now, boardId]);
 
-    const targetManagerId = user.managerId || 'usr_admin';
+    let targetManagerId: string = user.managerId || '';
+    if (!targetManagerId) {
+      const adminRow = goalsDb.query<{ id: string }, []>("SELECT id FROM users WHERE roles LIKE '%roles/admin%' OR roles LIKE '%roles/super_admin%' LIMIT 1").get();
+      targetManagerId = adminRow?.id || 'admin';
+    }
     const hasManager = Boolean(user.managerId);
     const remId = `rem_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
     const notificationMsg = hasManager
@@ -430,21 +412,22 @@ export function submitBoard(boardId: string, user: AuthUser): GoalBoard {
     goalsDb.run(`
       INSERT INTO reminders (id, org_id, user_id, board_id, type, message, due_date, is_dismissed, created_at)
       VALUES (?, ?, ?, ?, 'PENDING_APPROVAL', ?, null, 0, ?)
-    `, [
-      remId,
-      orgId,
-      targetManagerId,
-      boardId,
-      notificationMsg,
-      now,
-    ]);
+    `, [remId, orgId, targetManagerId, boardId, notificationMsg, now]);
+
+    // Record SUBMISSION activity in review timeline for all submissions
+    const subCommId = `comm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    const subText = `Submitted Board (Revision ${Number(board.revisionNumber) || 1}) with ${items.length} committed milestones for manager review.`;
+    goalsDb.run(`
+      INSERT INTO review_comments (id, board_id, item_id, author_id, author_name, author_role, comment_text, type, created_at)
+      VALUES (?, ?, null, ?, ?, ?, ?, 'SUBMISSION', ?)
+    `, [subCommId, boardId, user.id, user.displayName, user.jobTitle || 'Contributor', subText, now]);
 
     if (!hasManager) {
-      const commId = `comm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const guardCommId = `comm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
       goalsDb.run(`
         INSERT INTO review_comments (id, board_id, item_id, author_id, author_name, author_role, comment_text, type, created_at)
         VALUES (?, ?, null, 'sys_auth', 'System Guard', 'System Audit', 'Board submitted for approval. Contributor has no assigned manager — routed for Admin review.', 'FEEDBACK', ?)
-      `, [commId, boardId, now]);
+      `, [guardCommId, boardId, now]);
     }
 
     goalsDb.run(`

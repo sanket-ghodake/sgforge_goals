@@ -100,6 +100,10 @@ export function getHeadStateScript(options: { defaultTheme?: 'dark' | 'light' } 
  * getModernToastScript
  * @requirements [HLR-SDK-301] [LLR-SUB-001]
  */
+/**
+ * getModernToastScript
+ * @requirements [HLR-SDK-301] [LLR-SUB-001]
+ */
 export function getModernToastScript(): string {
   return `
     <div id="astryx-toast-container" class="modern-toast-container"></div>
@@ -108,22 +112,47 @@ export function getModernToastScript(): string {
         const ICONS = {
           success: '${icons.checkCircle.replace(/'/g, "\\'")}',
           error: '${icons.alertCircle.replace(/'/g, "\\'")}',
+          warning: '${icons.clock.replace(/'/g, "\\'")}',
           info: '${icons.infoCircle.replace(/'/g, "\\'")}'
         };
+        const CLOSE_ICON = '${icons.close.replace(/'/g, "\\'")}';
+
         window.modernToast = function(msg, type = 'info', duration = 3500) {
           const c = document.getElementById('astryx-toast-container');
           if (!c) return;
           const t = document.createElement('div');
-          t.className = 'modern-toast';
+          const typeVar = type === 'error' ? 'error' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'primary';
+          t.className = 'modern-toast modern-toast-' + type;
+          t.style.borderLeft = '3.5px solid var(--forge-' + typeVar + ')';
+          t.style.position = 'relative';
+          t.style.overflow = 'hidden';
+
           const iconHtml = ICONS[type] || ICONS.info;
-          t.innerHTML = '<span style="display:flex;align-items:center;color:var(--forge-' + (type === 'error' ? 'error' : type === 'success' ? 'success' : 'primary') + ');">' + iconHtml + '</span><span>' + msg + '</span>';
+          t.innerHTML = '<span style="display:flex;align-items:center;color:var(--forge-' + typeVar + ');flex-shrink:0;">' + iconHtml + '</span>' +
+            '<span style="flex:1;min-width:0;line-height:1.4;">' + msg + '</span>' +
+            '<button type="button" class="modern-toast-close" style="background:none;border:none;color:var(--forge-text-muted);cursor:pointer;display:inline-flex;align-items:center;padding:2px;border-radius:4px;flex-shrink:0;" aria-label="Dismiss notification">' + CLOSE_ICON + '</button>' +
+            '<div class="modern-toast-progress" style="position:absolute;bottom:0;left:0;height:2.5px;background:var(--forge-' + typeVar + ');width:100%;transition:width ' + (duration / 1000) + 's linear;"></div>';
+
+          const closeBtn = t.querySelector('.modern-toast-close');
+          const progressBar = t.querySelector('.modern-toast-progress');
           c.appendChild(t);
-          setTimeout(() => {
+
+          // Animate progress bar shrinkage
+          requestAnimationFrame(() => {
+            if (progressBar) progressBar.style.width = '0%';
+          });
+
+          let timerId = null;
+          const dismiss = () => {
+            if (timerId) clearTimeout(timerId);
             t.style.opacity = '0';
             t.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
             t.style.transform = 'translateY(6px)';
             setTimeout(() => t.remove(), 200);
-          }, duration);
+          };
+
+          if (closeBtn) closeBtn.onclick = dismiss;
+          timerId = setTimeout(dismiss, duration);
         };
         window.astryxToast = window.modernToast;
       })();
@@ -132,6 +161,145 @@ export function getModernToastScript(): string {
 }
 
 export const getAstryxToastScript = getModernToastScript;
+
+/**
+ * getModernSelectAndConfirmScripts
+ * @requirements [HLR-SDK-301] [LLR-SUB-001]
+ */
+export function getModernSelectAndConfirmScripts(): string {
+  return `
+    <script>
+      (function() {
+        // Universal Modern Select Engine
+        window.toggleModernSelect = function(id) {
+          const wrap = document.getElementById(id);
+          if (!wrap) return;
+          const menu = wrap.querySelector('.modern-select-menu');
+          const trigger = wrap.querySelector('.modern-select-trigger');
+          const isOpen = menu && menu.classList.contains('open');
+
+          // Close all open dropdowns
+          document.querySelectorAll('.modern-select-menu.open').forEach(m => m.classList.remove('open'));
+          document.querySelectorAll('.modern-select-trigger.open').forEach(tr => tr.classList.remove('open'));
+
+          if (!isOpen && menu && trigger) {
+            menu.classList.add('open');
+            trigger.classList.add('open');
+          }
+        };
+
+        window.selectModernOption = function(selectId, val, label) {
+          const wrap = document.getElementById(selectId);
+          if (!wrap) return;
+          const hiddenInput = wrap.querySelector('input[type="hidden"]');
+          const labelSpan = wrap.querySelector('.modern-select-label');
+          const menu = wrap.querySelector('.modern-select-menu');
+          const trigger = wrap.querySelector('.modern-select-trigger');
+
+          if (hiddenInput) {
+            hiddenInput.value = val;
+            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          if (labelSpan) labelSpan.textContent = label;
+
+          wrap.querySelectorAll('.modern-select-option').forEach(opt => {
+            if (opt.dataset.value === String(val)) {
+              opt.classList.add('selected');
+            } else {
+              opt.classList.remove('selected');
+            }
+          });
+
+          if (menu) menu.classList.remove('open');
+          if (trigger) trigger.classList.remove('open');
+        };
+
+        window.updateModernSelectOptions = function(selectId, options, placeholder = 'Select an option...') {
+          const wrap = document.getElementById(selectId);
+          if (!wrap) return;
+          const menu = wrap.querySelector('.modern-select-menu');
+          const labelSpan = wrap.querySelector('.modern-select-label');
+          const hiddenInput = wrap.querySelector('input[type="hidden"]');
+          if (!menu) return;
+
+          if (!options || options.length === 0) {
+            menu.innerHTML = '<div style="padding:10px 12px;font-size:0.8rem;color:var(--forge-text-muted);text-align:center;">No options available</div>';
+            if (labelSpan) labelSpan.textContent = placeholder;
+            if (hiddenInput) hiddenInput.value = '';
+            return;
+          }
+
+          let html = '';
+          let selectedLabel = placeholder;
+          let selectedValue = '';
+
+          options.forEach((opt, idx) => {
+            const isSel = opt.selected || idx === 0;
+            if (isSel && !selectedValue) {
+              selectedValue = opt.value;
+              selectedLabel = opt.label;
+            }
+            html += '<div class="modern-select-option ' + (isSel ? 'selected' : '') + '" data-value="' + opt.value + '" onclick="selectModernOption(\\'' + selectId + '\\', \\'' + opt.value.replace(/'/g, "\\\\'") + '\\', \\'' + opt.label.replace(/'/g, "\\\\'") + '\\')">' + opt.label + '</div>';
+          });
+
+          menu.innerHTML = html;
+          if (labelSpan) labelSpan.textContent = selectedLabel;
+          if (hiddenInput) hiddenInput.value = selectedValue;
+        };
+
+        // Close on Click Outside or Escape
+        document.addEventListener('click', function(e) {
+          if (!e.target.closest('.modern-select-wrap')) {
+            document.querySelectorAll('.modern-select-menu.open').forEach(m => m.classList.remove('open'));
+            document.querySelectorAll('.modern-select-trigger.open').forEach(tr => tr.classList.remove('open'));
+          }
+        });
+
+        // Universal Modern Confirm Modal Engine
+        let _confirmCallback = null;
+        window.showModernConfirm = function(opts) {
+          const modal = document.getElementById('universalConfirmModal');
+          if (!modal) return;
+          const titleEl = document.getElementById('confirmModalTitle');
+          const msgEl = document.getElementById('confirmModalMsg');
+          const btnConfirm = document.getElementById('confirmModalActionBtn');
+          const btnCancel = document.getElementById('confirmModalCancelBtn');
+
+          if (titleEl) titleEl.textContent = opts.title || 'Confirm Action';
+          if (msgEl) msgEl.textContent = opts.message || 'Are you sure you want to proceed?';
+          if (btnConfirm) {
+            btnConfirm.textContent = opts.confirmText || 'Confirm';
+            btnConfirm.className = 'btn-action btn-primary ' + (opts.confirmVariant === 'destructive' ? 'btn-danger' : opts.confirmVariant === 'success' ? 'btn-success' : '');
+            if (opts.confirmVariant === 'destructive') {
+              btnConfirm.style.background = 'var(--forge-error)';
+              btnConfirm.style.color = '#fff';
+            } else if (opts.confirmVariant === 'success') {
+              btnConfirm.style.background = 'var(--forge-success)';
+              btnConfirm.style.color = '#fff';
+            } else {
+              btnConfirm.style.background = '';
+              btnConfirm.style.color = '';
+            }
+          }
+          _confirmCallback = opts.onConfirm || null;
+          modal.classList.add('open');
+        };
+
+        window.closeModernConfirm = function() {
+          const modal = document.getElementById('universalConfirmModal');
+          if (modal) modal.classList.remove('open');
+          _confirmCallback = null;
+        };
+
+        window.executeModernConfirm = function() {
+          const cb = _confirmCallback;
+          closeModernConfirm();
+          if (typeof cb === 'function') cb();
+        };
+      })();
+    </script>
+  `;
+}
 
 /**
  * getModernTooltipScript

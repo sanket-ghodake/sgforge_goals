@@ -1,5 +1,5 @@
 import { icons } from '../../lib/icons';
-import { escapeHtml } from '../../lib/ui';
+import { escapeHtml, renderModernSelectHtml } from '../../lib/ui';
 import type { AuthUser, GoalBoard } from '../../lib/types';
 
 function getInitials(name: string): string {
@@ -144,13 +144,19 @@ export function renderExploreView(user: AuthUser, boards: GoalBoard[]): string {
 
           <!-- Dynamic SPA Multi-Page Table Footer Pagination -->
           <div style="padding: 16px 24px; border-top: 1px solid var(--forge-border); background: rgba(255,255,255,0.01); display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--forge-text-muted); flex-wrap: wrap; gap: 16px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
               <span>Rows per page:</span>
-              <select id="pageSizeSelect" class="db-col-filter" style="width: 70px; height: 32px;" onchange="window.changePageSize && window.changePageSize(this.value)">
-                <option value="5" selected>5</option>
-                <option value="10">10</option>
-                <option value="25">25</option>
-              </select>
+              ${renderModernSelectHtml({
+                id: 'pageSizeSelect',
+                value: '5',
+                style: 'width: 70px;',
+                triggerStyle: 'height: 32px; padding: 0 8px; font-size: 0.75rem;',
+                options: [
+                  { value: '5', label: '5', selected: true },
+                  { value: '10', label: '10' },
+                  { value: '25', label: '25' }
+                ],
+                onChange: 'window.changePageSize && window.changePageSize(val)'
+              })}
             </div>
 
             <div id="tablePaginationControls" style="display: flex; align-items: center; gap: 6px;">

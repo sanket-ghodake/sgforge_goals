@@ -6,10 +6,10 @@
  */
 
 import { icons } from '../../lib/icons';
-import { getLayoutStyles } from './layout-styles';
+import { getModernSelectAndConfirmScripts, cleanDisplayName, escapeHtml } from '../../lib/ui';
 import { getAstryxToastScript, getAstryxTooltipScript } from '../../lib/ui';
 import { getReviewDrawerScript } from './review-drawer';
-import { renderLogoutModal, renderNewBoardModal, renderRemindersDrawer, renderReworkModal } from './modals';
+import { renderNewBoardModal, renderRemindersDrawer, renderReworkModal, renderLogoutModal, renderUniversalConfirmModal } from './modals';
 import type { AuthUser, Reminder } from '../../lib/types';
 
 export interface LayoutOptions {
@@ -32,17 +32,28 @@ export function renderLayout(options: LayoutOptions): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <base href="/apps/goals/">
-  <title>SG Forge - Individual Goal Center</title>
+  <title>Individual Goal Center</title>
   <script>
     (function() {
       const theme = localStorage.getItem('forge_theme') || 'dark';
       document.documentElement.setAttribute('data-theme', theme);
       const isPinned = localStorage.getItem('goals_sidebar_pinned') === 'true';
       if (isPinned) document.documentElement.classList.add('sidebar-pinned');
+      window.__CURRENT_USER__ = {
+        id: ${JSON.stringify(user.id)},
+        displayName: ${JSON.stringify(user.displayName)},
+        email: ${JSON.stringify(user.email)},
+        roles: ${JSON.stringify(user.roles || [])},
+        department: ${JSON.stringify(user.department || '')},
+        managerId: ${JSON.stringify(user.managerId || '')},
+        managerName: ${JSON.stringify(user.managerName || '')}
+      };
     })();
   </script>
+  <link rel="stylesheet" href="assets/app.css">
   <style>
-    ${getLayoutStyles()}
+    /* Critical CSS fallback variables */
+    :root { color-scheme: dark light; }
   </style>
 </head>
 <body>
@@ -121,7 +132,7 @@ export function renderLayout(options: LayoutOptions): string {
 
     <!-- Main Content Area Container -->
     <main class="app-viewport">
-      <div class="content-area astryx-container aceternity-hero-grid" id="appMainContent">
+      <div class="content-area astryx-container" id="appMainContent">
         ${contentHtml}
       </div>
     </main>
@@ -140,9 +151,11 @@ export function renderLayout(options: LayoutOptions): string {
   </div>
 
   ${renderLogoutModal(user)}
+  ${renderUniversalConfirmModal()}
 
   ${getAstryxToastScript()}
   ${getAstryxTooltipScript()}
+  ${getModernSelectAndConfirmScripts()}
 
   <!-- 4. STRICT SPA CLIENT ROUTER & RESPONSIVE ENGINE -->
   <script>
@@ -200,10 +213,46 @@ export function renderLayout(options: LayoutOptions): string {
         });
     }
 
+    // Real User Monitoring (RUM) & Observability Telemetry Bridge
+    window.__astryxBreadcrumbs = [];
+    function addBreadcrumb(type, target, details) {
+      if (window.__astryxBreadcrumbs.length >= 10) window.__astryxBreadcrumbs.shift();
+      window.__astryxBreadcrumbs.push({ type, target, timestamp: Date.now(), details });
+    }
+    document.addEventListener('click', function(e) {
+      var el = e.target.closest('button, a, .modern-select');
+      if (el) addBreadcrumb('click', el.tagName + (el.id ? '#' + el.id : '') + (el.className ? '.' + String(el.className).split(' ')[0] : ''));
+    }, { passive: true });
+
+    function sendBrowserTelemetry(eventType, message, stack, meta) {
+      try {
+        fetch('api/logs/browser', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventType: eventType,
+            message: message,
+            stack: stack || '',
+            url: window.location.href,
+            breadcrumbs: window.__astryxBreadcrumbs,
+            meta: meta || {}
+          })
+        }).catch(function() {});
+      } catch (err) {}
+    }
+
+    window.addEventListener('error', function(e) {
+      sendBrowserTelemetry('error', e.message, e.error ? e.error.stack : '', { filename: e.filename, lineno: e.lineno });
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      sendBrowserTelemetry('unhandledrejection', e.reason ? (e.reason.message || String(e.reason)) : 'Unhandled Rejection', e.reason ? e.reason.stack : '');
+    });
+
     window.addEventListener('popstate', function(e) {
       const urlParams = new URLSearchParams(window.location.search);
       const tab = urlParams.get('tab') || 'dashboard';
       const boardId = urlParams.get('id');
+      addBreadcrumb('navigation', tab, { boardId: boardId });
       loadSpaView(tab, boardId);
     });
 
@@ -276,14 +325,17 @@ export function renderLayout(options: LayoutOptions): string {
         return res.json();
       })
       .then(newProj => {
-        const select = document.getElementById('boardProjectSelect');
-        if (select) {
-          const opt = document.createElement('option');
-          opt.value = newProj.id;
-          opt.textContent = newProj.name + ' (' + newProj.code + ')';
-          opt.selected = true;
-          select.appendChild(opt);
-        }
+        fetch('api/projects')
+          .then(r => r.json())
+          .then(projects => {
+            if (window.updateModernSelectOptions) {
+              window.updateModernSelectOptions('boardProjectSelect', projects.map(p => ({
+                value: p.id,
+                label: p.name + ' (' + p.code + ')',
+                selected: p.id === newProj.id
+              })));
+            }
+          });
         if (nameInput) nameInput.value = '';
         if (codeInput) codeInput.value = '';
         toggleQuickProjectCreation();
@@ -296,20 +348,18 @@ export function renderLayout(options: LayoutOptions): string {
 
     function openNewBoardModal() {
       const modal = document.getElementById('newBoardModal');
-      const select = document.getElementById('boardProjectSelect');
       if (modal) modal.classList.add('open');
-      if (select) {
-        fetch('api/projects')
-          .then(res => res.json())
-          .then(projects => {
-            if (projects && projects.length > 0) {
-              select.innerHTML = projects.map(p => '<option value="' + p.id + '">' + p.name + ' (' + p.code + ')</option>').join('');
-            } else {
-              select.innerHTML = '<option value="" disabled selected>No projects found. Click + New Project above.</option>';
-            }
-          })
-          .catch(() => {});
-      }
+      fetch('api/projects')
+        .then(res => res.json())
+        .then(projects => {
+          if (window.updateModernSelectOptions) {
+            window.updateModernSelectOptions('boardProjectSelect', projects.map(p => ({
+              value: p.id,
+              label: p.name + ' (' + p.code + ')'
+            })), 'Select an active project...');
+          }
+        })
+        .catch(() => {});
     }
 
     function closeNewBoardModal() {
@@ -335,9 +385,16 @@ export function renderLayout(options: LayoutOptions): string {
 
     function handleCreateBoard(e) {
       e.preventDefault();
-      const projectId = document.getElementById('boardProjectSelect').value;
+      const projInput = document.getElementById('boardProjectSelect_input') || document.getElementById('boardProjectSelect');
+      const projectId = projInput ? projInput.value : '';
       const title = document.getElementById('boardTitleInput').value;
-      const cycle = document.getElementById('boardCycleSelect').value;
+      const cycleInput = document.getElementById('boardCycleSelect_input') || document.getElementById('boardCycleSelect');
+      const cycle = cycleInput ? cycleInput.value : '';
+
+      if (!projectId) {
+        if (window.astryxToast) window.astryxToast('Please select a project for the goal board.', 'warning');
+        return;
+      }
 
       fetch('api/boards', {
         method: 'POST',
@@ -361,6 +418,7 @@ export function renderLayout(options: LayoutOptions): string {
         if (typeof closeReworkModal === 'function') closeReworkModal();
         if (typeof closeReviewDrawer === 'function') closeReviewDrawer();
         if (typeof closeRemindersDrawer === 'function') closeRemindersDrawer();
+        if (typeof closeModernConfirm === 'function') closeModernConfirm();
       }
     });
 

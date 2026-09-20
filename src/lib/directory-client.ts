@@ -267,3 +267,32 @@ export async function checkEmployeeIsManager(
   }
 }
 
+/**
+ * Checks how many subordinate managers exist within a given list of direct report user IDs.
+ * Queries SG Forge Central Auth endpoint: GET /api/v1/auth/hierarchy/:id/is-manager for each report.
+ * @requirements [HLR-AUTH-102] [LLR-AUTH-012] [HLR-SDK-301]
+ */
+export async function checkSubordinateManagers(
+  directReportIds: string[],
+  options: { baseUrl?: string; incomingReq?: Request } = {}
+): Promise<{ totalReports: number; subordinateManagersCount: number; managerIds: string[] }> {
+  if (!Array.isArray(directReportIds) || directReportIds.length === 0) {
+    return { totalReports: 0, subordinateManagersCount: 0, managerIds: [] };
+  }
+
+  const managerIds: string[] = [];
+  for (const reportId of directReportIds) {
+    if (!reportId) continue;
+    const check = await checkEmployeeIsManager(reportId, options);
+    if (check && check.isManager) {
+      managerIds.push(reportId);
+    }
+  }
+
+  return {
+    totalReports: directReportIds.length,
+    subordinateManagersCount: managerIds.length,
+    managerIds,
+  };
+}
+

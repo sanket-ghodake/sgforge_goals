@@ -47,8 +47,8 @@ case "$CMD" in
         "$REPO_ROOT/scripts/run/quality.sh" "$@"
         ;;
 
-    # Production Deployment, Database Snapshots, Hardening & Cryptography
-    deploy-prod|rollback-prod|prod-status|backup|backup-daemon|backup-verify|harden|gen-key)
+    # Production Deployment, Database Snapshots, Hardening, Cryptography & Observability Triage
+    deploy-prod|rollback-prod|prod-status|backup|backup-daemon|backup-verify|harden|gen-key|blast-radius|triage)
         "$REPO_ROOT/scripts/run/ops.sh" "$@"
         ;;
 

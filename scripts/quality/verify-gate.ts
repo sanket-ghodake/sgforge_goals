@@ -239,21 +239,47 @@ if (testProc.status !== 0) {
 }
 
 // --------------------------------------------------------------------------
-// Check 13: Modern UI Compliance (shadcn / Magic UI / Aceternity / Luxe)
+// Check 13: Modern UI Compliance & Zero Browser Defaults (shadcn / Magic UI / Aceternity / Luxe)
 // --------------------------------------------------------------------------
-let unapprovedCss = false;
-for (const f of sourceFiles) {
-  if (f.endsWith('.ts') || f.endsWith('.tsx')) {
-    const content = readFileSync(f, 'utf8');
-    if (content.includes('style="') && (content.includes('color: red') || content.includes('color: blue'))) {
-      failGate('13', 'Modern UI Compliance', `Unapproved inline styles detected in ${relative(APP_ROOT, f)}`);
-      unapprovedCss = true;
-      break;
-    }
+let uiViolation: string | null = null;
+const frontendFiles = sourceFiles.filter((f) => f.includes('src/frontend') || f.includes('src/lib/ui'));
+
+for (const f of frontendFiles) {
+  const content = readFileSync(f, 'utf8');
+  const relPath = relative(APP_ROOT, f);
+
+  if (content.includes('style="') && (content.includes('color: red') || content.includes('color: blue'))) {
+    uiViolation = `Unapproved raw inline styles detected in ${relPath}`;
+    break;
+  }
+
+  if (/<select[\s>]/.test(content)) {
+    uiViolation = `Native OS <select> dropdown detected in ${relPath}. Must use modern custom select (renderModernSelectHtml / .modern-select).`;
+    break;
+  }
+
+  if (/\b(alert|confirm|prompt)\s*\(/.test(content)) {
+    uiViolation = `Raw browser dialog call (alert/confirm/prompt) detected in ${relPath}. Must use window.modernToast or window.showModernConfirm.`;
+    break;
+  }
+
+  const interactiveTitleMatch = content.match(/<(button|a|input|div|span)[^>]*\s+title=["'][^"']+["']/i);
+  if (interactiveTitleMatch) {
+    uiViolation = `Native OS tooltip title="..." detected on interactive element in ${relPath} (${interactiveTitleMatch[0]}). Must use data-astryx-tooltip.`;
+    break;
+  }
+
+  const rawRangeMatch = content.match(/<input[^>]*type=["']range["'][^>]*>/i);
+  if (rawRangeMatch && !rawRangeMatch[0].includes('modern-range-input')) {
+    uiViolation = `Unstyled native <input type="range"> detected in ${relPath}. Must include modern-range-input class for modern styling.`;
+    break;
   }
 }
-if (!unapprovedCss) {
-  passGate('13', 'Modern UI Compliance', 'All UI layouts strictly adhere to portable modern design system tokens (shadcn / Magic UI / Aceternity / Luxe).');
+
+if (uiViolation) {
+  failGate('13', 'Modern UI & Zero Browser Defaults', uiViolation);
+} else {
+  passGate('13', 'Modern UI & Zero Browser Defaults', 'Zero browser defaults: custom dropdowns, custom sliders, and custom tooltips enforced.');
 }
 
 // --------------------------------------------------------------------------

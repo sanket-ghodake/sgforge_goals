@@ -10,7 +10,7 @@ import type { Reminder } from '../../lib/types';
 export function listUserReminders(userId: string, orgId: string): Reminder[] {
   const rows = goalsDb.query<any, [string, string]>(`
     SELECT * FROM reminders 
-    WHERE org_id = ? AND (user_id = ? OR user_id = 'usr_all' OR user_id = 'all') AND is_dismissed = 0
+    WHERE org_id = ? AND user_id = ? AND is_dismissed = 0
     ORDER BY created_at DESC
   `).all(orgId, userId);
 
@@ -31,6 +31,6 @@ export function dismissReminder(reminderId: string, userId: string, orgId: strin
   goalsDb.run(`
     UPDATE reminders 
     SET is_dismissed = 1 
-    WHERE id = ? AND org_id = ? AND (user_id = ? OR user_id = 'all' OR user_id = 'usr_all')
+    WHERE id = ? AND org_id = ? AND user_id = ?
   `, [reminderId, orgId, userId]);
 }
