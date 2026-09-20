@@ -347,6 +347,14 @@ export function escapeHtml(unsafe: string | null | undefined): string {
     .replace(/'/g, '&#039;');
 }
 
+/**
+ * Strips parenthetical designations or roles from display names (e.g. "Arjun Nair (Design Engineer)" -> "Arjun Nair").
+ */
+export function cleanDisplayName(name?: string | null): string {
+  if (!name) return '';
+  return String(name).replace(/\s*\([^)]*\)\s*$/, '').trim();
+}
+
 export function getStatusBadge(status: string): { label: string; style: string } {
   switch (status) {
     case 'SUBMITTED':

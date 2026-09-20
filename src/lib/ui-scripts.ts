@@ -77,27 +77,18 @@ export function getHeadStateScript(options: { defaultTheme?: 'dark' | 'light' } 
               };
             }
 
-            // D. Background Token Expiry Poller (Every 10s)
+            // D. Background Active Session Heartbeat (Every 30s)
             setInterval(function() {
-              try {
-                var cookies = document.cookie || '';
-                var match = cookies.match(/(?:^|;\s*)(?:auth_token|forge_session)=([^;]+)/);
-                if (match && match[1]) {
-                  var token = decodeURIComponent(match[1]);
-                  var parts = token.split('.');
-                  if (parts.length >= 2) {
-                    var payloadJson = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
-                    var payload = JSON.parse(payloadJson);
-                    if (payload.exp && typeof payload.exp === 'number') {
-                      var nowSec = Math.floor(Date.now() / 1000);
-                      if (nowSec > payload.exp) {
-                        onCrossTabLogout('token_expired_poller');
-                      }
+              if (document.visibilityState === 'visible') {
+                origFetch('/api/auth/me', { headers: { 'Accept': 'application/json' } })
+                  .then(function(res) {
+                    if (res && res.status === 401) {
+                      onCrossTabLogout('session_heartbeat_expired');
                     }
-                  }
-                }
-              } catch(e) {}
-            }, 10000);
+                  })
+                  .catch(function() {});
+              }
+            }, 30000);
           }
         } catch(e) {}
       })();

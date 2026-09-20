@@ -1,13 +1,9 @@
 # ==============================================================================
-# Standalone Forge App Compose: Quick-Launch Root Compose (Air-Gapped by Default)
+# Standalone Forge App Compose: Root Compose (Air-Gapped by Default)
 # Invariant: internal: true -> ZERO outbound internet egress. Inbound via proxy.
-#
-# USAGE MATRIX (choose ONE at a time to avoid container_name conflicts):
-#   Root (this file)         ./run.sh compose up -d           → container: ag-app-goals-local
-#   Dev  (docker/dev/)       cd docker/dev && docker compose  → container: ag-app-goals-dev
-#   Prod (docker/prod/)      cd docker/prod && docker compose → container: ag-app-goals-prod
+# Fully driven by .env parameters: APP_NAME, PORT, CONTAINER_PREFIX
 # ==============================================================================
-name: forge-app-goals-local
+name: ${CONTAINER_PREFIX:-forge}-app-${APP_NAME:-goals}
 
 networks:
   # 1. Isolated Application Network (Strict Air-Gap: No default gateway to internet)
@@ -17,7 +13,7 @@ networks:
 
   # 2. Reverse-Proxy Gateway Mesh (Inbound routing from Caddy proxy only)
   forge-gateway-net:
-    name: ${FORGE_APPS_NETWORK:-ag_forge_apps_net}
+    name: ${FORGE_APPS_NETWORK:-${CONTAINER_PREFIX:-forge}_apps_net}
     external: true
 
 services:
@@ -25,7 +21,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    container_name: ${CONTAINER_PREFIX:-ag}-app-goals-local
+    container_name: ${CONTAINER_PREFIX:-forge}-app-${APP_NAME:-goals}
     ports:
       - "${PORT:-8090}:${PORT:-8090}"
     env_file:
@@ -33,17 +29,23 @@ services:
         required: false
     environment:
       - PORT=${PORT:-8090}
+      - APP_NAME=${APP_NAME:-goals}
+      - CONTAINER_PREFIX=${CONTAINER_PREFIX:-forge}
       - NODE_ENV=${NODE_ENV:-development}
+      - FORGE_GATEWAY_URL=${FORGE_GATEWAY_URL:-http://localhost:8080}
+      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://localhost:8080/auth}
+      - JWT_SECRET=${JWT_SECRET:-dev-portable-secret-key-that-is-at-least-32-characters-long}
     command: ["bun", "--watch", "src/server.ts"]
     volumes:
       - ./src:/app/src
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - ${DATA_DIR:-./data}:/app/data
+      - ${LOG_DIR:-./logs}:/app/logs
     networks:
       goals-airgap-net:
       forge-gateway-net:
         aliases:
-          - app-goals-local
+          - app-${APP_NAME:-goals}
+          - ${APP_NAME:-goals}
     restart: unless-stopped
     stop_grace_period: 10s
     logging:
@@ -52,7 +54,7 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8089}/health || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8090}/health || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 3

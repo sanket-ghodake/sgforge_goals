@@ -46,3 +46,20 @@
 2026-09-19 16:57 | Committed: feat(cli): align run.sh modular architecture, complete portable toolchains, and isolate Copilot/Antigravity directives (d319ad8)
 2026-09-19 17:07 | Reorganized scripts into clean subdirectories (quality, ai, ops, run) and enforced zero post-commit modifications invariant
 2026-09-19 11:40 | pre-commit: staged 31 files (33 files changed, 121 insertions(+), 53 deletions(-))
+2026-09-19 17:14 | Added ./run.sh docker dev and docker prod command dispatchers matching main portal
+2026-09-19 17:21 | Fixed docker/dev/Dockerfile build context and verified ./run.sh docker dev execution and healthchecks
+2026-09-19 17:36 | Connected goals micro-app to forge_apps_net with app-goals network alias resolving 502 Bad Gateway
+2026-09-19 18:05 | Audited and implemented minimal .env-driven container/DB config and real employee/manager/department integration with Central Forge
+2026-09-19 23:03 | Purged previous goals containers, networks, images, volumes, and local SQLite data
+2026-09-19 23:14 | Removed user card from sidebar and fixed Central Auth sync for manager and department
+2026-09-20 09:17 | Replaced Jane/John Doe fallback with Session Logged Out screen and auto-redirect to Central Auth
+2026-09-20 09:34 | Audit and remove dummy data, mock personas, hardcoded fallback strings, and auto-seeding across database, server, views, and services
+2026-09-20 09:51 | Removed employee profile name section from the master top header bar
+2026-09-20 09:53 | Redesigned dashboard employee identity card with 2026 LTS standards and HUD alignment pods
+2026-09-20 09:57 | Eliminate test fixture database pollution, clean hardcoded reviews counts, and isolate test_goals.db
+2026-09-20 09:57 | Removed parenthetical designation from employee and manager display names on dashboard
+2026-09-20 10:29 | Restricted Goal Center access to Managers & Leadership and seeded dev employee test data
+2026-09-20 11:46 | Integrated dedicated SG Forge Central Auth endpoint GET /api/v1/auth/hierarchy/:id/is-manager for manager clearance
+2026-09-20 12:07 | feat(security,ui): implement complete audit remediation, Zero-Trust JWT auth, XSS escapes, state machine RBAC and modern shadcn controls
+2026-09-20 07:55 | pre-commit: staged 43 files (44 files changed, 2355 insertions(+), 827 deletions(-))
+2026-09-20 07:55 | pre-commit: staged 43 files (45 files changed, 2357 insertions(+), 827 deletions(-))

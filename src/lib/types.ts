@@ -15,6 +15,8 @@ export interface AuthUser {
   managerId?: string | null;
   managerName?: string | null;
   managerEmail?: string | null;
+  jobTitle?: string | null;
+  employeeCode?: string | null;
 }
 
 export interface UserRow {
@@ -26,6 +28,8 @@ export interface UserRow {
   manager_id?: string | null;
   manager_name?: string | null;
   manager_email?: string | null;
+  job_title?: string | null;
+  employee_code?: string | null;
   created_at: number;
 }
 
@@ -56,6 +60,13 @@ export interface ScopedHierarchyResponse {
     email: string;
     roleTitle: string;
   }>;
+}
+
+export interface EmployeeManagerCheckResponse {
+  status: 'SUCCESS' | 'ERROR';
+  userId: string;
+  isManager: boolean;
+  directReportsCount: number;
 }
 
 export interface ProblemDetails {

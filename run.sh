@@ -21,7 +21,7 @@ case "$CMD" in
         ;;
 
     # Core Development, Scaffolding & Testing
-    setup|dev|start|test|reset-db|doctor|clean|sync-ignores|setup-hooks|worklog)
+    setup|dev|start|test|reset-db|seed|doctor|clean|sync-ignores|setup-hooks|worklog)
         "$REPO_ROOT/scripts/run/core.sh" "$@"
         ;;
 
@@ -29,6 +29,14 @@ case "$CMD" in
     docker)
         shift || true
         "$REPO_ROOT/scripts/run/docker.sh" "$@"
+        ;;
+    docker:dev)
+        shift || true
+        "$REPO_ROOT/scripts/run/docker.sh" dev "$@"
+        ;;
+    docker:prod)
+        shift || true
+        "$REPO_ROOT/scripts/run/docker.sh" prod "$@"
         ;;
     up|down|ps|status|top|ctop|monitor|logs|restart|compose|build|purge|reset-data)
         "$REPO_ROOT/scripts/run/docker.sh" "$@"

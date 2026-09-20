@@ -1,4 +1,4 @@
-name: forge-app-goals-prod
+name: ${CONTAINER_PREFIX:-forge}-app-${APP_NAME:-goals}-prod
 
 networks:
   goals-airgap-net:
@@ -6,7 +6,7 @@ networks:
     internal: true
 
   forge-gateway-net:
-    name: ${FORGE_APPS_NETWORK:-${CONTAINER_PREFIX:-ag}_forge_apps_net}
+    name: ${FORGE_APPS_NETWORK:-${CONTAINER_PREFIX:-forge}_apps_net}
     external: true
 
 services:
@@ -14,20 +14,26 @@ services:
     build:
       context: ../..
       dockerfile: docker/prod/Dockerfile
-    container_name: ${CONTAINER_PREFIX:-ag}-app-goals-prod
+    container_name: ${CONTAINER_PREFIX:-forge}-app-${APP_NAME:-goals}-prod
     ports:
       - "${PORT:-8090}:${PORT:-8090}"
     environment:
       - PORT=${PORT:-8090}
+      - APP_NAME=${APP_NAME:-goals}
+      - CONTAINER_PREFIX=${CONTAINER_PREFIX:-forge}
       - NODE_ENV=production
+      - FORGE_GATEWAY_URL=${FORGE_GATEWAY_URL:-http://localhost:8080}
+      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://localhost:8080/auth}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set for production}
     volumes:
-      - ../../data:/app/data
-      - ../../logs:/app/logs
+      - ${DATA_DIR:-../../data}:/app/data
+      - ${LOG_DIR:-../../logs}:/app/logs
     networks:
       goals-airgap-net:
       forge-gateway-net:
         aliases:
-          - app-goals
+          - app-${APP_NAME:-goals}
+          - ${APP_NAME:-goals}
     restart: always
     logging:
       driver: "json-file"

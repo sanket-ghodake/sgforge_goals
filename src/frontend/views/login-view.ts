@@ -1,20 +1,51 @@
 /**
- * Individual Goal Center - Standalone App Login View (2026 LTS)
- * Premium Vercel / Supabase obsidian dark aesthetic login page.
+ * Individual Goal Center - Session Logged Out & Authentication Gateway View (2026 LTS)
+ * Modern Glassmorphic Screen: Informs employee that session is logged out,
+ * provides explicit "Log In Again" action button, and automatically redirects to Central Auth.
  * @requirements [HLR-UI-201] [LLR-SUB-001] [HLR-GOALS-001]
  */
 
 import { icons } from '../../lib/icons';
 import { getLayoutStyles } from './layout-styles';
+import { escapeHtml } from '../../lib/ui';
 
-export function renderLoginView(): string {
+export function resolveBrowserLoginUrl(req?: Request): string {
+  const returnParam = encodeURIComponent('/apps/goals/');
+
+  if (req) {
+    const hostHeader = req.headers.get('host') || '';
+    const forwardedHost = req.headers.get('x-forwarded-host') || '';
+    const effectiveHost = forwardedHost || hostHeader;
+
+    // If accessed through reverse proxy (e.g. localhost:8080 or port 80/443)
+    if (effectiveHost.includes(':8080') || (!effectiveHost.includes(':8090') && effectiveHost)) {
+      return `/auth/login?return_url=${returnParam}`;
+    }
+  }
+
+  const envUrl = process.env.AUTH_SERVICE_URL || process.env.FORGE_GATEWAY_URL;
+  if (envUrl) {
+    let clean = envUrl.trim().replace(/\/+$/, '');
+    if (clean.includes('proxy')) {
+      clean = clean.replace('proxy', 'localhost');
+    }
+    const base = clean.endsWith('/auth') ? clean : `${clean}/auth`;
+    return `${base}/login?return_url=${returnParam}`;
+  }
+
+  return `/auth/login?return_url=${returnParam}`;
+}
+
+export function renderSessionLoggedOutView(req?: Request): string {
+  const loginUrl = resolveBrowserLoginUrl(req);
+
   return `<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <base href="/apps/goals/">
-  <title>Sign In - Individual Goal Center</title>
+  <title>Session Logged Out - Goal Center</title>
   <style>
     ${getLayoutStyles()}
 
@@ -25,208 +56,374 @@ export function renderLoginView(): string {
       min-height: 100vh;
       background-color: #09090b;
       margin: 0;
-      padding: 20px;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--forge-text-main);
     }
 
-    .login-container {
+    .logout-card {
       width: 100%;
-      max-width: 440px;
-      background: rgba(18, 18, 21, 0.92);
-      border: 1px solid rgba(255, 255, 255, 0.10);
+      max-width: 460px;
+      background: rgba(18, 18, 21, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 20px;
-      padding: 32px 28px;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      animation: loginFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      padding: 36px 32px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      text-align: center;
+      animation: logoutFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    @keyframes loginFadeIn {
-      from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    @keyframes logoutFadeIn {
+      from { opacity: 0; transform: translateY(16px) scale(0.97); }
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
-    .login-header {
-      text-align: center;
-      margin-bottom: 28px;
-    }
-
-    .login-brand-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: 14px;
-      background: linear-gradient(135deg, var(--forge-primary), var(--forge-accent));
+    .logout-icon-beacon {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(245, 158, 11, 0.2));
+      border: 1px solid rgba(245, 158, 11, 0.35);
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #ffffff;
-      margin: 0 auto 14px auto;
-      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+      color: var(--forge-warning);
+      margin: 0 auto 20px auto;
+      box-shadow: 0 8px 24px rgba(245, 158, 11, 0.2);
     }
 
-    .login-title {
-      font-size: 1.4rem;
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #f87171;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 12px;
+    }
+
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #ef4444;
+      box-shadow: 0 0 8px #ef4444;
+    }
+
+    .logout-title {
+      font-size: 1.45rem;
       font-weight: 700;
-      color: var(--forge-text-main);
+      color: #ffffff;
       letter-spacing: -0.02em;
-      margin-bottom: 6px;
+      margin: 0 0 8px 0;
     }
 
-    .login-subtitle {
-      font-size: 0.85rem;
+    .logout-desc {
+      font-size: 0.875rem;
       color: var(--forge-text-muted);
-      line-height: 1.4;
+      line-height: 1.5;
+      margin: 0 0 24px 0;
     }
 
-    .persona-card {
-      background: rgba(24, 24, 27, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+    .btn-login-again {
+      width: 100%;
+      height: 46px;
       border-radius: 12px;
-      padding: 14px 16px;
+      background: linear-gradient(135deg, var(--forge-primary), var(--forge-accent));
+      color: #ffffff;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      border: none;
       cursor: pointer;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
+      gap: 8px;
+      text-decoration: none;
+      box-shadow: 0 4px 18px rgba(99, 102, 241, 0.35);
       transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-      margin-bottom: 10px;
     }
 
-    .persona-card:hover {
-      border-color: var(--forge-primary);
-      background: rgba(32, 32, 38, 0.95);
+    .btn-login-again:hover {
       transform: translateY(-2px);
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 6px 22px rgba(99, 102, 241, 0.5);
+      filter: brightness(1.08);
     }
 
-    .persona-name {
-      font-size: 0.875rem;
-      font-weight: 700;
-      color: var(--forge-text-main);
-    }
-
-    .persona-dept {
-      font-size: 0.75rem;
+    .redirect-box {
+      margin-top: 20px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 0.8125rem;
       color: var(--forge-text-muted);
-      margin-top: 2px;
     }
 
-    .divider-text {
-      display: flex;
-      align-items: center;
-      margin: 20px 0;
-      font-size: 0.75rem;
-      color: var(--forge-text-subtle);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-weight: 600;
-    }
-
-    .divider-text::before, .divider-text::after {
-      content: "";
-      flex: 1;
-      height: 1px;
-      background: rgba(255, 255, 255, 0.08);
-    }
-    .divider-text span { padding: 0 12px; }
-
-    .form-group {
-      margin-bottom: 16px;
-    }
-
-    .form-label {
-      display: block;
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--forge-text-muted);
-      margin-bottom: 6px;
-    }
-
-    .form-input {
+    .progress-bar-container {
       width: 100%;
-      height: 40px;
-      border-radius: 10px;
-      background: rgba(24, 24, 27, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      color: var(--forge-text-main);
-      padding: 0 14px;
-      font-size: 0.875rem;
-      transition: all 0.2s ease;
+      height: 3px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 9999px;
+      margin-top: 10px;
+      overflow: hidden;
     }
 
-    .form-input:focus {
-      outline: none;
-      border-color: var(--forge-primary);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+    .progress-bar-fill {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--forge-primary), var(--forge-accent));
+      transition: width 3s linear;
     }
   </style>
 </head>
 <body>
-  <div class="login-container">
-    <div class="login-header">
-      <div class="login-brand-icon">
-        ${icons.target}
-      </div>
-      <h1 class="login-title">Individual Goal Center</h1>
-      <p class="login-subtitle">
-        Sign in to access your goal boards, milestone velocity, and review flight plans.
-      </p>
+  <div class="logout-card">
+    <div class="logout-icon-beacon">
+      ${icons.lock}
     </div>
 
-    <!-- Central SG Forge SSO Authentication -->
-    <div style="margin-bottom: 20px;">
-      <a href="/auth/login" class="btn-action btn-primary" style="width: 100%; height: 44px; justify-content: center; font-size: 0.9rem; text-decoration: none; display: flex; align-items: center; border-radius: 10px;">
-        ${icons.shieldCheck} Authenticate via SG Forge SSO
-      </a>
+    <div class="status-badge">
+      <span class="pulse-dot"></span>
+      <span>Session Logged Out</span>
     </div>
 
-    <div class="divider-text">
-      <span>Or Sign In with Corporate Credentials</span>
+    <h1 class="logout-title">Session Expired</h1>
+    <p class="logout-desc">
+      Your session is no longer active. To protect your corporate account and access your goal boards, please log in again.
+    </p>
+
+    <a href="${escapeHtml(loginUrl)}" class="btn-login-again" id="loginNowBtn">
+      ${icons.logIn} Log In Again ${icons.arrowRight}
+    </a>
+
+    <div class="redirect-box">
+      <div>Redirecting to Central Authentication in <strong id="countdown" style="color: #ffffff;">3</strong>s...</div>
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill" id="progressFill"></div>
+      </div>
+      <div style="margin-top: 10px; font-size: 0.75rem;">
+        <a href="${escapeHtml(loginUrl)}" style="color: var(--forge-primary); text-decoration: none;">Click here if you are not redirected automatically</a>
+      </div>
     </div>
-
-    <form id="directLoginForm" onsubmit="handleDirectLogin(event)">
-      <div class="form-group">
-        <label class="form-label">Corporate Email Address</label>
-        <input type="email" id="loginEmail" class="form-input" placeholder="e.g. user@forge.internal" required value="" />
-      </div>
-
-      <div class="form-group" style="margin-bottom: 22px;">
-        <label class="form-label">Session Token / Secret</label>
-        <input type="password" id="loginToken" class="form-input" placeholder="Enter session token..." value="" required />
-      </div>
-
-      <button type="submit" class="btn-action btn-outline" style="width: 100%; height: 42px; justify-content: center; font-size: 0.9rem;">
-        ${icons.logIn} Access Goal Center
-      </button>
-    </form>
   </div>
 
   <script>
-    function loginWithPersona(persona) {
-      fetch('api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ persona: persona })
-      })
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        window.location.href = '?tab=dashboard';
-      })
-      .catch(function(err) {
-        if (window.astryxToast) {
-          window.astryxToast('Authentication failed: ' + err.message, 'error');
-        } else {
-          console.error('Authentication failed: ' + err.message);
+    (function() {
+      // Clear any stale persona or expired session residue
+      document.cookie = 'goals_persona=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      document.cookie = 'forge_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+
+      var target = ${JSON.stringify(loginUrl)};
+      var seconds = 3;
+      var countEl = document.getElementById('countdown');
+      var fillEl = document.getElementById('progressFill');
+
+      setTimeout(function() {
+        if (fillEl) fillEl.style.width = '0%';
+      }, 50);
+
+      var timer = setInterval(function() {
+        seconds--;
+        if (countEl) countEl.textContent = String(seconds);
+        if (seconds <= 0) {
+          clearInterval(timer);
+          window.location.href = target;
         }
-      });
+      }, 1000);
+    })();
+  </script>
+</body>
+</html>`;
+}
+
+export function renderLoginView(req?: Request): string {
+  return renderSessionLoggedOutView(req);
+}
+
+export function renderLeadershipRestrictedView(user?: { email?: string | null; displayName?: string | null; jobTitle?: string | null }, req?: Request): string {
+  const loginUrl = resolveBrowserLoginUrl(req);
+
+  return `<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <base href="/apps/goals/">
+  <title>Leadership Clearance Required - Goal Center</title>
+  <style>
+    ${getLayoutStyles()}
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background-color: #09090b;
+      margin: 0;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--forge-text-main);
     }
 
-    function handleDirectLogin(e) {
-      e.preventDefault();
-      const email = document.getElementById('loginEmail').value;
-      const persona = email.includes('sarah') ? 'manager' : email.includes('morgan') ? 'solo' : 'employee';
-      loginWithPersona(persona);
+    .clearance-card {
+      width: 100%;
+      max-width: 480px;
+      background: rgba(18, 18, 21, 0.95);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      border-radius: 20px;
+      padding: 36px 32px;
+      text-align: center;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7), 0 0 30px rgba(239, 68, 68, 0.08);
+      backdrop-filter: blur(16px);
+      position: relative;
     }
-  </script>
+
+    .clearance-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .clearance-title {
+      font-size: 1.45rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 10px 0;
+      color: #ffffff;
+    }
+
+    .clearance-desc {
+      font-size: 0.875rem;
+      line-height: 1.5;
+      color: var(--forge-text-muted);
+      margin: 0 0 24px 0;
+    }
+
+    .account-badge-box {
+      background: var(--forge-bg-surface);
+      border: 1px solid var(--forge-border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-align: left;
+    }
+
+    .account-badge-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.875rem;
+      color: var(--forge-text-muted);
+    }
+
+    .btn-clearance-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      height: 42px;
+      background: var(--forge-primary);
+      color: #ffffff;
+      font-size: 0.875rem;
+      font-weight: 600;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      box-sizing: border-box;
+      margin-bottom: 10px;
+    }
+
+    .btn-clearance-primary:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    .btn-clearance-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      height: 40px;
+      background: transparent;
+      border: 1px solid var(--forge-border);
+      color: var(--forge-text-muted);
+      font-size: 0.85rem;
+      font-weight: 500;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      box-sizing: border-box;
+    }
+
+    .btn-clearance-secondary:hover {
+      color: var(--forge-text-main);
+      border-color: var(--forge-border-medium);
+    }
+  </style>
+</head>
+<body>
+  <div class="clearance-card">
+    <div class="clearance-badge">
+      ${icons.shieldAlert}
+      <span>Leadership Clearance Required</span>
+    </div>
+
+    <h1 class="clearance-title">Manager Access Only</h1>
+    <p class="clearance-desc">
+      Individual Goal Center oversight and review workspaces are restricted to People Managers, Department Leads, and Executive Leadership.
+    </p>
+
+    ${user?.email ? `
+      <div class="account-badge-box">
+        <div class="account-badge-avatar">
+          ${escapeHtml((user.displayName || user.email || 'U').charAt(0).toUpperCase())}
+        </div>
+        <div style="min-width: 0; flex: 1;">
+          <div style="font-weight: 600; font-size: 0.85rem; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            ${escapeHtml(user.displayName || 'Current User')}
+          </div>
+          <div style="font-size: 0.75rem; color: var(--forge-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            ${escapeHtml(user.email)} &bull; ${escapeHtml(user.jobTitle || 'Individual Contributor')}
+          </div>
+        </div>
+      </div>
+    ` : ''}
+
+    <a href="${escapeHtml(loginUrl)}" class="btn-clearance-primary">
+      ${icons.logIn} Switch to Manager Account
+    </a>
+
+    <a href="/portal" class="btn-clearance-secondary">
+      ${icons.arrowRight} Return to Forge Platform Portal
+    </a>
+  </div>
 </body>
 </html>`;
 }

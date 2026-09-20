@@ -10,41 +10,26 @@ import type { AuthUser, CreateBoardInput, GoalBoard, GoalBoardRow, GoalItem, Goa
 export class BoardLockedError extends Error {
   readonly status = 423;
   readonly code = 'BOARD_LOCKED';
-  constructor(message: string) {
-    super(message);
-    this.name = 'BoardLockedError';
-  }
+  constructor(message: string) { super(message); this.name = 'BoardLockedError'; }
 }
-
 export class ValidationError extends Error {
   readonly status = 400;
   readonly code = 'VALIDATION_ERROR';
-  constructor(message: string) {
-    super(message);
-    this.name = 'ValidationError';
-  }
+  constructor(message: string) { super(message); this.name = 'ValidationError'; }
 }
-
 export class ForbiddenError extends Error {
   readonly status = 403;
   readonly code = 'FORBIDDEN';
-  constructor(message: string) {
-    super(message);
-    this.name = 'ForbiddenError';
-  }
+  constructor(message: string) { super(message); this.name = 'ForbiddenError'; }
 }
-
 export class NotFoundError extends Error {
   readonly status = 404;
   readonly code = 'NOT_FOUND';
-  constructor(message: string) {
-    super(message);
-    this.name = 'NotFoundError';
-  }
+  constructor(message: string) { super(message); this.name = 'NotFoundError'; }
 }
 
 export function listProjects(orgId: string): Project[] {
-  return goalsDb.query<ProjectRow, [string, string]>('SELECT * FROM projects WHERE org_id = ? OR org_id = ? ORDER BY name ASC').all(orgId, 'org_default').map(p => ({
+  return goalsDb.query<ProjectRow, [string]>('SELECT * FROM projects WHERE org_id = ? ORDER BY name ASC').all(orgId).map(p => ({
     id: p.id,
     orgId: p.org_id,
     name: p.name,
@@ -119,7 +104,7 @@ export function listBoards(orgId: string, filter?: { ownerId?: string; projectId
     ownerName: r.owner_name,
     ownerEmail: r.owner_email,
     ownerDepartment: r.owner_department,
-    managerName: r.manager_name || r.approved_by || 'Sarah Connor',
+    managerName: r.manager_name || r.approved_by || null,
     title: r.title,
     cycle: r.cycle,
     status: r.status,
@@ -134,6 +119,34 @@ export function listBoards(orgId: string, filter?: { ownerId?: string; projectId
     updatedAt: r.updated_at,
     items: itemsByBoardId[r.id] || [],
   }));
+}
+
+export function createProjectRecord(project: {
+  id?: string;
+  orgId: string;
+  name: string;
+  code: string;
+  description?: string;
+  managerId: string;
+}): Project {
+  const id = project.id || `proj_${crypto.randomUUID()}`;
+  const now = Date.now();
+  const desc = project.description || '';
+
+  goalsDb.run(
+    `INSERT INTO projects (id, org_id, name, code, description, manager_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, project.orgId, project.name.trim(), project.code.trim().toUpperCase(), desc.trim(), project.managerId, now]
+  );
+
+  return {
+    id,
+    orgId: project.orgId,
+    name: project.name.trim(),
+    code: project.code.trim().toUpperCase(),
+    description: desc.trim(),
+    managerId: project.managerId,
+    createdAt: now,
+  };
 }
 
 export function getBoardById(boardId: string, orgId: string, requestingUser?: AuthUser): GoalBoard {
@@ -151,7 +164,7 @@ export function getBoardById(boardId: string, orgId: string, requestingUser?: Au
 
   // Security Authorization Check: Timeline comments accessible ONLY by board owner or manager/admin
   const isOwner = requestingUser ? requestingUser.id === row.owner_id : true;
-  const isManager = requestingUser ? (requestingUser.roles.some((r: string) => r === 'roles/manager' || r === 'roles/admin' || r === 'roles/super_admin') || requestingUser.id === 'usr_manager' || row.manager_id === requestingUser.id) : true;
+  const isManager = requestingUser ? (requestingUser.roles.some((r: string) => r === 'roles/manager' || r === 'roles/admin' || r === 'roles/super_admin') || row.manager_id === requestingUser.id) : true;
   const allowedTimeline = isOwner || isManager;
 
   // Auto-lock check for overdue submission deadlines
@@ -206,7 +219,7 @@ export function getBoardById(boardId: string, orgId: string, requestingUser?: Au
     ownerName: row.owner_name,
     ownerEmail: row.owner_email,
     ownerDepartment: row.owner_department,
-    managerName: row.manager_name || row.approved_by || 'Sarah Connor',
+    managerName: row.manager_name || row.approved_by || null,
     title: row.title,
     cycle: row.cycle,
     status: currentStatus,
@@ -238,17 +251,31 @@ export function assertBoardMutable(board: GoalBoard, user: AuthUser): void {
   }
 
   if (board.status === 'LOCKED_OVERDUE') {
-    throw new BoardLockedError('Submission deadline passed. Board is auto-locked. Request manager unlock to continue editing.');
+    throw new BoardLockedError('This board is locked due to an expired submission deadline. Request unlock from manager.');
+  }
+
+  if (board.status === 'UNLOCK_REQUESTED') {
+    throw new BoardLockedError('Unlock request is pending manager review.');
   }
 }
 
 export function createBoard(input: CreateBoardInput, user: AuthUser): GoalBoard {
-  const orgId = user.orgId || 'org_default';
-  const now = Date.now();
-  const id = `board_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  if (!input.title || input.title.trim().length === 0) {
+    throw new ValidationError('Goal board title is required.');
+  }
+  if (!input.projectId) {
+    throw new ValidationError('Assigned project is required.');
+  }
+  if (!input.cycle || input.cycle.trim().length === 0) {
+    throw new ValidationError('Evaluation cycle is required.');
+  }
 
-  // Verify project belongs to org or is an org_default baseline project
-  const project = goalsDb.query<any, [string, string, string]>('SELECT * FROM projects WHERE id = ? AND (org_id = ? OR org_id = ?)').get(input.projectId, orgId, 'org_default');
+  const id = `board_${crypto.randomUUID()}`;
+  const now = Date.now();
+  const orgId = user.orgId || 'org_default';
+
+  // Verify project belongs to org
+  const project = goalsDb.query<any, [string, string]>('SELECT * FROM projects WHERE id = ? AND org_id = ?').get(input.projectId, orgId);
   if (!project) {
     throw new NotFoundError('Selected project not found in this organization.');
   }
@@ -263,18 +290,26 @@ export function createBoard(input: CreateBoardInput, user: AuthUser): GoalBoard 
     user.id,
     user.displayName,
     user.email,
-    user.department || 'Engineering Squad',
+    user.department || 'General',
     input.title.trim(),
     input.cycle.trim(),
     now,
     now,
   ]);
 
+  const defaultTargetDate = (() => {
+    const d = new Date();
+    const qEnd = [2, 5, 8, 11];
+    const qDays = [31, 30, 30, 31];
+    const q = Math.floor(d.getMonth() / 3);
+    return `${d.getFullYear()}-${String(qEnd[q] + 1).padStart(2, '0')}-${qDays[q]}`;
+  })();
+
   // Insert an initial starter milestone
   goalsDb.run(`
     INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, created_at, updated_at)
-    VALUES (?, ?, 'Define initial milestone deliverables', 'Outline project deliverables and target verification metrics.', 'DELIVERABLE', '2026-03-31', 100, 0, 'PENDING', 1, ?, ?)
-  `, [`item_${id}_1`, id, now, now]);
+    VALUES (?, ?, 'Define initial milestone deliverables', 'Outline project deliverables and target verification metrics.', 'DELIVERABLE', ?, 100, 0, 'PENDING', 1, ?, ?)
+  `, [`item_${id}_1`, id, defaultTargetDate, now, now]);
 
   return getBoardById(id, orgId);
 }
@@ -290,28 +325,62 @@ export function updateGoalItems(boardId: string, input: UpdateGoalItemsInput, us
 
   const now = Date.now();
 
-  // Atomically rewrite items
+  // Reconcile and update items without dropping IDs to preserve comment thread references
   goalsDb.transaction(() => {
-    goalsDb.run('DELETE FROM goal_items WHERE board_id = ?', [boardId]);
+    const existingItems = goalsDb.query<any, [string]>('SELECT id FROM goal_items WHERE board_id = ?').all(boardId);
+    const existingIds = new Set(existingItems.map(i => i.id));
+    const submittedIds = new Set<string>();
+
     input.items.forEach((item, index) => {
-      const itemId = item.id && item.id.startsWith('item_') ? item.id : `item_${boardId}_${index + 1}`;
-      goalsDb.run(`
-        INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        itemId,
-        boardId,
-        item.title.trim(),
-        item.description?.trim() || '',
-        item.category || 'DELIVERABLE',
-        item.targetDate || '2026-03-31',
-        Number(item.weight) || 0,
-        Number(item.progressPercent) || 0,
-        item.status || 'PENDING',
-        index + 1,
-        now,
-        now,
-      ]);
+      const sanitizedWeight = Math.max(0, Math.min(100, Math.round(Number(item.weight) || 0)));
+      const sanitizedProgress = Math.max(0, Math.min(100, Math.round(Number(item.progressPercent) || 0)));
+      const itemId = item.id && existingIds.has(item.id) ? item.id : (item.id && item.id.startsWith('item_') ? item.id : `item_${boardId}_${index + 1}`);
+      submittedIds.add(itemId);
+
+      if (existingIds.has(itemId)) {
+        goalsDb.run(`
+          UPDATE goal_items 
+          SET title = ?, description = ?, category = ?, target_date = ?, weight = ?, progress_percent = ?, status = ?, sort_order = ?, updated_at = ?
+          WHERE id = ? AND board_id = ?
+        `, [
+          item.title.trim(),
+          item.description?.trim() || '',
+          item.category || 'DELIVERABLE',
+          item.targetDate || '2026-03-31',
+          sanitizedWeight,
+          sanitizedProgress,
+          item.status || 'PENDING',
+          index + 1,
+          now,
+          itemId,
+          boardId,
+        ]);
+      } else {
+        goalsDb.run(`
+          INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          itemId,
+          boardId,
+          item.title.trim(),
+          item.description?.trim() || '',
+          item.category || 'DELIVERABLE',
+          item.targetDate || '2026-03-31',
+          sanitizedWeight,
+          sanitizedProgress,
+          item.status || 'PENDING',
+          index + 1,
+          now,
+          now,
+        ]);
+      }
+    });
+
+    // Remove deleted items that were omitted
+    existingItems.forEach(i => {
+      if (!submittedIds.has(i.id)) {
+        goalsDb.run('DELETE FROM goal_items WHERE id = ? AND board_id = ?', [i.id, boardId]);
+      }
     });
 
     goalsDb.run('UPDATE goal_boards SET updated_at = ? WHERE id = ?', [now, boardId]);
@@ -393,6 +462,10 @@ export function updateItemProgress(boardId: string, itemId: string, progressPerc
 
   if (board.ownerId !== user.id && !user.roles.includes('roles/admin')) {
     throw new ForbiddenError('Only the goal board owner can update milestone progress.');
+  }
+
+  if (board.status !== 'APPROVED' && board.status !== 'COMPLETED') {
+    throw new ValidationError(`Milestone progress can only be updated on APPROVED or COMPLETED boards. Current status is ${board.status}.`);
   }
 
   const validProgress = Math.max(0, Math.min(100, Math.round(Number(progressPercent) || 0)));

@@ -60,15 +60,20 @@ if [ -f "$REPO_ROOT/.env" ]; then
     CONTAINER_PREFIX="$(grep -E '^CONTAINER_PREFIX=' "$REPO_ROOT/.env" 2>/dev/null | head -n 1 | cut -d '=' -f2- | tr -d '"' | tr -d "'" || true)"
     FORGE_APPS_NETWORK="$(grep -E '^FORGE_APPS_NETWORK=' "$REPO_ROOT/.env" 2>/dev/null | head -n 1 | cut -d '=' -f2- | tr -d '"' | tr -d "'" || true)"
     COMPOSE_PROJECT_NAME="$(grep -E '^COMPOSE_PROJECT_NAME=' "$REPO_ROOT/.env" 2>/dev/null | head -n 1 | cut -d '=' -f2- | tr -d '"' | tr -d "'" || true)"
+    FORGE_GATEWAY_URL="$(grep -E '^FORGE_GATEWAY_URL=' "$REPO_ROOT/.env" 2>/dev/null | head -n 1 | cut -d '=' -f2- | tr -d '"' | tr -d "'" || true)"
+    AUTH_SERVICE_URL="$(grep -E '^AUTH_SERVICE_URL=' "$REPO_ROOT/.env" 2>/dev/null | head -n 1 | cut -d '=' -f2- | tr -d '"' | tr -d "'" || true)"
+    JWT_SECRET="$(grep -E '^JWT_SECRET=' "$REPO_ROOT/.env" 2>/dev/null | head -n 1 | cut -d '=' -f2- | tr -d '"' | tr -d "'" || true)"
 fi
 
 APP_NAME="${APP_NAME:-goals}"
 PORT="${PORT:-8090}"
 NODE_ENV="${NODE_ENV:-development}"
 BRAND_NAME="${BRAND_NAME:-SG Forge}"
-CONTAINER_PREFIX="${CONTAINER_PREFIX:-ag}"
-FORGE_APPS_NETWORK="${FORGE_APPS_NETWORK:-${CONTAINER_PREFIX}_forge_apps_net}"
-COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-${CONTAINER_PREFIX}-${APP_NAME}}"
+CONTAINER_PREFIX="${CONTAINER_PREFIX:-forge}"
+FORGE_APPS_NETWORK="${FORGE_APPS_NETWORK:-${CONTAINER_PREFIX}_apps_net}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-${CONTAINER_PREFIX}-app-${APP_NAME}}"
+FORGE_GATEWAY_URL="${FORGE_GATEWAY_URL:-http://localhost:8080}"
+AUTH_SERVICE_URL="${AUTH_SERVICE_URL:-http://localhost:8080/auth}"
 
 # ==============================================================================
 # Enterprise Air-Gap & Zero-Telemetry Invariants (100% Fully Local & Offline-Safe)
@@ -86,3 +91,4 @@ export CHECKPOINT_DISABLE=1
 
 export REPO_ROOT HOST_OS HOST_ARCH RTK PORTABLE_BUN
 export APP_NAME PORT NODE_ENV BRAND_NAME CONTAINER_PREFIX FORGE_APPS_NETWORK COMPOSE_PROJECT_NAME
+export FORGE_GATEWAY_URL AUTH_SERVICE_URL JWT_SECRET

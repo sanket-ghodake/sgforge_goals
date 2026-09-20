@@ -5,10 +5,12 @@
  */
 
 import { createLogger, getDatabaseClient } from '../lib/sdk';
+import type { AuthUser } from '../lib/types';
 
 const logger = createLogger('goals-db');
 
-export const goalsDb = getDatabaseClient('goals.db');
+const dbFilename = `${process.env.APP_NAME || 'goals'}.db`;
+export const goalsDb = getDatabaseClient(dbFilename);
 
 // Set SQLite performance & concurrency pragmas
 goalsDb.run('PRAGMA journal_mode = WAL;');
@@ -26,9 +28,14 @@ goalsDb.run(`
     manager_id TEXT,
     manager_name TEXT,
     manager_email TEXT,
+    job_title TEXT,
+    employee_code TEXT,
     created_at INTEGER NOT NULL
   );
 `);
+
+try { goalsDb.run('ALTER TABLE users ADD COLUMN job_title TEXT'); } catch (_) {}
+try { goalsDb.run('ALTER TABLE users ADD COLUMN employee_code TEXT'); } catch (_) {}
 
 goalsDb.run(`
   CREATE TABLE IF NOT EXISTS goals_items (
@@ -126,132 +133,54 @@ goalsDb.run(`
   );
 `);
 
-// Seed initial realistic data if empty
+// Add query optimization indexes
+goalsDb.run('CREATE INDEX IF NOT EXISTS idx_goal_boards_org_owner ON goal_boards(org_id, owner_id);');
+goalsDb.run('CREATE INDEX IF NOT EXISTS idx_goal_items_board_id ON goal_items(board_id);');
+goalsDb.run('CREATE INDEX IF NOT EXISTS idx_review_comments_board_id ON review_comments(board_id);');
+goalsDb.run('CREATE INDEX IF NOT EXISTS idx_reminders_org_user ON reminders(org_id, user_id, is_dismissed);');
+
+// Seed initial data if explicitly requested (Strict Zero-Dummy Invariant)
 export function seedDefaultData(defaultOrgId = 'org_default'): void {
-  const userCount = goalsDb.query<{ count: number }, []>('SELECT count(*) as count FROM users').get();
+  // Pure production zero-seed invariant: data is dynamically created by users or synced from central directory
+}
+
+/**
+ * createProject
+ * @requirements [LLR-GOALS-001]
+ */
+export function createProject(project: {
+  id?: string;
+  orgId: string;
+  name: string;
+  code: string;
+  description?: string;
+  managerId: string;
+}): { id: string; orgId: string; name: string; code: string; description: string; managerId: string; createdAt: number } {
+  const id = project.id || `proj_${crypto.randomUUID()}`;
   const now = Date.now();
-
-  if (!userCount || userCount.count === 0) {
-    goalsDb.run(
-      `INSERT INTO users (id, email, display_name, roles, department, manager_id, manager_name, manager_email, created_at) VALUES
-       ('usr_employee', 'jane.doe@forge.internal', 'Jane Doe', 'roles/employee', 'Platform Engineering', 'usr_manager', 'Sarah Connor', 'sarah.connor@forge.internal', ?),
-       ('usr_alex', 'alex.rivera@forge.internal', 'Alex Rivera', 'roles/employee', 'Core Systems', 'usr_manager', 'Sarah Connor', 'sarah.connor@forge.internal', ?),
-       ('usr_devon', 'devon.vance@forge.internal', 'Devon Vance', 'roles/employee', 'Security & SRE', 'usr_manager', 'Sarah Connor', 'sarah.connor@forge.internal', ?),
-       ('usr_manager', 'sarah.connor@forge.internal', 'Sarah Connor', 'roles/manager,roles/employee', 'Platform Engineering', null, null, null, ?),
-       ('usr_solo', 'morgan.lee@forge.internal', 'Morgan Lee', 'roles/employee', 'Independent Operations', null, null, null, ?)`,
-      [now, now, now, now, now]
-    );
-  }
-
-  const projectCount = goalsDb.query<{ count: number }, []>('SELECT count(*) as count FROM projects').get();
-  if (!projectCount || projectCount.count === 0) {
-    goalsDb.run(
-      `INSERT INTO projects (id, org_id, name, code, description, manager_id, created_at) VALUES
-       ('proj_titan', ?, 'Project Titan', 'TITAN', 'Core API Gateway & Zero-Trust Reverse Proxy Infrastructure', 'usr_manager', ?),
-       ('proj_apollo', ?, 'Project Apollo', 'APOLLO', 'High-Performance Observability & Telemetry Processing Engine', 'usr_manager', ?),
-       ('proj_hermes', ?, 'Project Hermes', 'HERMES', 'Next-Generation Multi-Tenant Edge Storage & Distributed Cache', 'usr_manager', ?)`,
-      [defaultOrgId, now, defaultOrgId, now, defaultOrgId, now]
-    );
-  }
-
-  const boardCount = goalsDb.query<{ count: number }, []>('SELECT count(*) as count FROM goal_boards').get();
-  if (boardCount && boardCount.count > 0) return;
-
-  // 2. Sample Goal Boards in various states
-  // Board 1: DRAFT (Jane Doe, Titan, 2026-Q1) - Editable
-  goalsDb.run(
-    `INSERT INTO goal_boards (id, org_id, project_id, owner_id, owner_name, owner_email, owner_department, title, cycle, status, lock_version, revision_number, created_at, updated_at) VALUES
-     ('board_titan_q1', ?, 'proj_titan', 'usr_employee', 'Jane Doe', 'jane.doe@forge.internal', 'Platform Engineering', 'Q1 Titan Architecture & Edge Performance', '2026-Q1', 'DRAFT', 1, 1, ?, ?)`,
-    [defaultOrgId, now - 86400000 * 5, now - 86400000 * 2]
-  );
-
-  // Goals for Board 1
-  goalsDb.run(
-    `INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, created_at, updated_at) VALUES
-     ('item_1_1', 'board_titan_q1', 'Implement RFC 7807 problem details across all proxy endpoints', 'Standardize structured error payloads with trace IDs and actionable error URIs.', 'DELIVERABLE', '2026-02-15', 35, 60, 'IN_PROGRESS', 1, ?, ?),
-     ('item_1_2', 'board_titan_q1', 'Optimize edge gateway p99 latency to under 30ms', 'Conduct load test benchmarks and fine-tune Bun socket concurrency buffers.', 'METRIC', '2026-03-01', 35, 20, 'IN_PROGRESS', 2, ?, ?),
-     ('item_1_3', 'board_titan_q1', 'Complete Advanced Zero-Trust Architecture Certification', 'Advance infrastructure resilience and multi-tenant boundary compliance.', 'LEARNING', '2026-03-25', 30, 0, 'PENDING', 3, ?, ?)`,
-    [now, now, now, now, now, now]
-  );
-
-  // Board 2: SUBMITTED (Jane Doe, Apollo, 2026-Q1) - Locked under Manager Review
-  goalsDb.run(
-    `INSERT INTO goal_boards (id, org_id, project_id, owner_id, owner_name, owner_email, owner_department, title, cycle, status, lock_version, revision_number, submitted_at, created_at, updated_at) VALUES
-     ('board_apollo_q1', ?, 'proj_apollo', 'usr_employee', 'Jane Doe', 'jane.doe@forge.internal', 'Platform Engineering', 'Q1 Apollo Telemetry Pipeline Scale', '2026-Q1', 'SUBMITTED', 1, 1, ?, ?, ?)`,
-    [defaultOrgId, now - 86400000 * 1, now - 86400000 * 4, now - 86400000 * 1]
-  );
+  const desc = project.description || '';
 
   goalsDb.run(
-    `INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, created_at, updated_at) VALUES
-     ('item_2_1', 'board_apollo_q1', 'Deploy Zero-Egress In-Memory Trace Collector', 'Stream telemetry internally without outbound cloud dependencies.', 'DELIVERABLE', '2026-02-28', 50, 0, 'PENDING', 1, ?, ?),
-     ('item_2_2', 'board_apollo_q1', 'Achieve 100k events/sec sustained ingestion rate', 'Benchmark memory footprint under high ingestion stress.', 'METRIC', '2026-03-15', 50, 0, 'PENDING', 2, ?, ?)`,
-    [now, now, now, now]
+    `INSERT INTO projects (id, org_id, name, code, description, manager_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, project.orgId, project.name.trim(), project.code.trim().toUpperCase(), desc.trim(), project.managerId, now]
   );
 
-  // Board 3: REWORK_REQUESTED (Alex Rivera, Hermes, 2026-Q1) - Unlocked for Revision (v2)
-  goalsDb.run(
-    `INSERT INTO goal_boards (id, org_id, project_id, owner_id, owner_name, owner_email, owner_department, title, cycle, status, lock_version, revision_number, created_at, updated_at) VALUES
-     ('board_hermes_q1', ?, 'proj_hermes', 'usr_alex', 'Alex Rivera', 'alex.rivera@forge.internal', 'Core Systems', 'Q1 Distributed Cache Layer Rollout', '2026-Q1', 'REWORK_REQUESTED', 2, 2, ?, ?)`,
-    [defaultOrgId, now - 86400000 * 8, now - 86400000 * 1]
-  );
-
-  goalsDb.run(
-    `INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, created_at, updated_at) VALUES
-     ('item_3_1', 'board_hermes_q1', 'Design Shared SQLite WAL Cache Buffer', 'Enable concurrent reads without lock contention.', 'DELIVERABLE', '2026-02-20', 50, 30, 'IN_PROGRESS', 1, ?, ?),
-     ('item_3_2', 'board_hermes_q1', 'Attain 99.95% cache hit ratio across micro-apps', 'Requires concrete measurement tool specification.', 'METRIC', '2026-03-20', 50, 10, 'IN_PROGRESS', 2, ?, ?)`,
-    [now, now, now, now]
-  );
-
-  goalsDb.run(
-    `INSERT INTO review_comments (id, board_id, item_id, author_id, author_name, author_role, comment_text, type, created_at) VALUES
-     ('comm_3_1', 'board_hermes_q1', 'item_3_2', 'usr_manager', 'Sarah Connor', 'Engineering Lead', 'Please specify the exact measurement harness we will use for the 99.95% cache hit calculation before final signoff.', 'REWORK_REQUEST', ?)`,
-    [now - 86400000 * 1]
-  );
-
-  // Board 4: APPROVED (Devon Vance, Titan, 2025-Q4) - Sealed Immutable History
-  goalsDb.run(
-    `INSERT INTO goal_boards (id, org_id, project_id, owner_id, owner_name, owner_email, owner_department, title, cycle, status, lock_version, revision_number, submitted_at, approved_at, approved_by, created_at, updated_at) VALUES
-     ('board_titan_q4', ?, 'proj_titan', 'usr_devon', 'Devon Vance', 'devon.vance@forge.internal', 'Security & SRE', 'Q4 Zero-Trust Token Verification Suite', '2025-Q4', 'APPROVED', 2, 1, ?, ?, 'Sarah Connor (Engineering Lead)', ?, ?)`,
-    [defaultOrgId, now - 86400000 * 90, now - 86400000 * 85, now - 86400000 * 95, now - 86400000 * 85]
-  );
-
-  goalsDb.run(
-    `INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, created_at, updated_at) VALUES
-     ('item_4_1', 'board_titan_q4', 'Implement HMAC-SHA256 Token Signature Verification', 'Completed and passed 100% branch test coverage.', 'DELIVERABLE', '2025-11-15', 50, 100, 'COMPLETED', 1, ?, ?),
-     ('item_4_2', 'board_titan_q4', 'Zero Security Regressions on Core Gateway', 'Verified via automated nightly SAST pipeline.', 'METRIC', '2025-12-15', 50, 100, 'COMPLETED', 2, ?, ?)`,
-    [now, now, now, now]
-  );
-
-  // Board 5: SUBMITTED (Morgan Lee, Titan, 2026-Q1) - Employee with NO Manager Assigned
-  goalsDb.run(
-    `INSERT INTO goal_boards (id, org_id, project_id, owner_id, owner_name, owner_email, owner_department, title, cycle, status, lock_version, revision_number, submitted_at, created_at, updated_at) VALUES
-     ('board_solo_q1', ?, 'proj_titan', 'usr_solo', 'Morgan Lee', 'morgan.lee@forge.internal', 'Independent Operations', 'Q1 Autonomous Edge Monitoring Node', '2026-Q1', 'SUBMITTED', 1, 1, ?, ?, ?)`,
-    [defaultOrgId, now - 86400000 * 2, now - 86400000 * 3, now - 86400000 * 2]
-  );
-
-  goalsDb.run(
-    `INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, created_at, updated_at) VALUES
-     ('item_5_1', 'board_solo_q1', 'Deploy Autonomous Edge Monitoring Agent', 'Self-contained monitoring harness with direct admin fallback.', 'DELIVERABLE', '2026-02-25', 100, 40, 'IN_PROGRESS', 1, ?, ?)`,
-    [now, now]
-  );
-
-  // 3. In-App Reminders
-  goalsDb.run(
-    `INSERT INTO reminders (id, org_id, user_id, board_id, type, message, due_date, is_dismissed, created_at) VALUES
-     ('rem_1', ?, 'usr_employee', 'board_titan_q1', 'SUBMISSION_DUE', 'Q1 Goal Submission cycle closing in 4 days. Finalize and submit Project Titan board.', '2026-01-20', 0, ?),
-     ('rem_2', ?, 'usr_manager', 'board_apollo_q1', 'PENDING_APPROVAL', 'Jane Doe submitted Project Apollo Q1 Board for manager review.', '2026-01-22', 0, ?),
-     ('rem_3', ?, 'usr_alex', 'board_hermes_q1', 'REWORK_REQUIRED', 'Sarah Connor requested revisions on your Q1 Hermes Board. Review feedback.', '2026-01-18', 0, ?)`,
-    [defaultOrgId, now, defaultOrgId, now, defaultOrgId, now]
-  );
-
-  logger.info('Database initialized with realistic projects, goal boards, and reminders');
+  return {
+    id,
+    orgId: project.orgId,
+    name: project.name.trim(),
+    code: project.code.trim().toUpperCase(),
+    description: desc.trim(),
+    managerId: project.managerId,
+    createdAt: now,
+  };
 }
 
 /**
   * getUserById
   * @requirements [LLR-SUB-001]
   */
-export function getUserById(userId: string): { id: string; email: string; displayName: string; roles: string[]; department: string; managerId: string | null; managerName: string | null; managerEmail: string | null } | null {
+export function getUserById(userId: string): AuthUser | null {
   const row = goalsDb.query<any, [string]>('SELECT * FROM users WHERE id = ?').get(userId);
   if (!row) return null;
   return {
@@ -263,6 +192,8 @@ export function getUserById(userId: string): { id: string; email: string; displa
     managerId: row.manager_id || null,
     managerName: row.manager_name || null,
     managerEmail: row.manager_email || null,
+    jobTitle: row.job_title || null,
+    employeeCode: row.employee_code || null,
   };
 }
 
@@ -270,7 +201,7 @@ export function getUserById(userId: string): { id: string; email: string; displa
   * listUsers
   * @requirements [LLR-SUB-001]
   */
-export function listUsers() {
+export function listUsers(): AuthUser[] {
   const rows = goalsDb.query<any, []>('SELECT * FROM users ORDER BY display_name ASC').all();
   return rows.map(r => ({
     id: r.id,
@@ -281,6 +212,8 @@ export function listUsers() {
     managerId: r.manager_id || null,
     managerName: r.manager_name || null,
     managerEmail: r.manager_email || null,
+    jobTitle: r.job_title || null,
+    employeeCode: r.employee_code || null,
   }));
 }
 
@@ -288,29 +221,43 @@ export function listUsers() {
   * upsertUser
   * @requirements [LLR-SUB-001]
   */
-export function upsertUser(user: { id: string; email: string; displayName: string; roles: string[]; department?: string; managerId?: string | null; managerName?: string | null; managerEmail?: string | null }) {
+export function upsertUser(user: { id: string; email: string; displayName: string; roles?: string[]; department?: string; managerId?: string | null; managerName?: string | null; managerEmail?: string | null; jobTitle?: string | null; employeeCode?: string | null }): AuthUser {
   const existing = getUserById(user.id);
   const now = Date.now();
   const rolesStr = Array.isArray(user.roles) ? user.roles.join(',') : (user.roles || 'roles/employee');
-  const dept = user.department || 'Platform Engineering';
+  const dept = user.department || 'General';
   const mgrId = user.managerId || null;
   const mgrName = user.managerName || null;
   const mgrEmail = user.managerEmail || null;
+  const jobTitle = user.jobTitle || null;
+  const employeeCode = user.employeeCode || null;
 
   if (existing) {
     goalsDb.run(
-      `UPDATE users SET email = ?, display_name = ?, roles = ?, department = ?, manager_id = ?, manager_name = ?, manager_email = ? WHERE id = ?`,
-      [user.email, user.displayName, rolesStr, dept, mgrId, mgrName, mgrEmail, user.id]
+      `UPDATE users SET email = ?, display_name = ?, roles = ?, department = ?, manager_id = ?, manager_name = ?, manager_email = ?, job_title = ?, employee_code = ? WHERE id = ?`,
+      [user.email, user.displayName, rolesStr, dept, mgrId, mgrName, mgrEmail, jobTitle, employeeCode, user.id]
     );
   } else {
     goalsDb.run(
-      `INSERT INTO users (id, email, display_name, roles, department, manager_id, manager_name, manager_email, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [user.id, user.email, user.displayName, rolesStr, dept, mgrId, mgrName, mgrEmail, now]
+      `INSERT INTO users (id, email, display_name, roles, department, manager_id, manager_name, manager_email, job_title, employee_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [user.id, user.email, user.displayName, rolesStr, dept, mgrId, mgrName, mgrEmail, jobTitle, employeeCode, now]
     );
   }
 
   return getUserById(user.id)!;
 }
 
-// Auto-seed on startup
-seedDefaultData();
+/**
+ * Checks whether a user has subordinates registered locally in goals.db
+ * @requirements [HLR-AUTH-102] [LLR-GOALS-001]
+ */
+export function isLocalManager(userId: string): boolean {
+  if (!userId) return false;
+  try {
+    const row = goalsDb.query(`SELECT COUNT(*) as c FROM users WHERE manager_id = ?`).get(userId) as { c: number } | null;
+    return Number(row?.c || 0) > 0;
+  } catch {
+    return false;
+  }
+}
+

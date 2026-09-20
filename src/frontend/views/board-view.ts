@@ -13,8 +13,8 @@ import type { AuthUser, GoalBoard, GoalItem } from '../../lib/types';
  * @requirements [HLR-UI-201] [LLR-GOALS-001]
  */
 export function renderBoardView(user: AuthUser, board: GoalBoard): string {
-  const isOwner = board.ownerId === user.id || user.roles.includes('roles/admin');
-  const isManager = user.roles.includes('roles/manager') || user.id === 'usr_manager';
+  const isOwner = board.ownerId === user.id || user.roles.includes('roles/admin') || user.roles.includes('roles/super_admin');
+  const isManager = user.roles.includes('roles/manager') || user.roles.includes('roles/admin') || user.roles.includes('roles/super_admin');
   const isTeamMember = isManager && (board.ownerId !== user.id);
   const canAccessReview = isOwner || isTeamMember;
 
@@ -140,7 +140,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
         </div>
 
         <div id="milestonesContainer" style="display: flex; flex-direction: column; gap: 14px;">
-          ${items.map((item, index) => renderMilestoneCard(item, index + 1, canEdit)).join('')}
+          ${items.map((item, index) => renderMilestoneCard(item, index + 1, canEdit, board.status === 'APPROVED' || board.status === 'COMPLETED')).join('')}
         </div>
       </div>
 
@@ -240,7 +240,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
               </div>
               <div>
                 <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Category</label>
-                <select class="milestone-category-select" style="height:34px;">
+                <select class="shadcn-select milestone-category-select" style="height:34px;">
                   <option value="DELIVERABLE">Deliverable</option>
                   <option value="METRIC">Metric</option>
                   <option value="LEARNING">Learning</option>
@@ -419,7 +419,7 @@ function renderLockBanner(board: GoalBoard): string {
   return `<div style="background: ${b.bg}; border: 1px solid ${b.border}; border-radius: 10px; padding: 16px 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 14px;"><span style="color: ${b.color}; display: flex;">${b.icon}</span><div><h4 style="font-size: 0.95rem; font-weight: 700; color: ${b.color}; margin-bottom: 2px;">${b.title}</h4><p style="font-size: 0.8rem; color: var(--forge-text-main);">${b.text}</p></div></div>`;
 }
 
-function renderMilestoneCard(item: GoalItem, index: number, canEdit: boolean): string {
+function renderMilestoneCard(item: GoalItem, index: number, canEdit: boolean, isBoardApproved: boolean = false): string {
   const safeTitle = escapeHtml(item.title);
   const safeDesc = escapeHtml(item.description);
   const safeTargetDate = escapeHtml(item.targetDate || '2026-03-31');
@@ -443,7 +443,7 @@ function renderMilestoneCard(item: GoalItem, index: number, canEdit: boolean): s
         </div>
         <div>
           <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Category</label>
-          <select class="milestone-category-select" ${!canEdit ? 'disabled' : ''} style="height:34px;">
+          <select class="shadcn-select milestone-category-select" ${!canEdit ? 'disabled' : ''} style="height:34px;">
             <option value="DELIVERABLE" ${item.category === 'DELIVERABLE' ? 'selected' : ''}>Deliverable</option>
             <option value="METRIC" ${item.category === 'METRIC' ? 'selected' : ''}>Metric</option>
             <option value="LEARNING" ${item.category === 'LEARNING' ? 'selected' : ''}>Learning</option>
@@ -468,7 +468,7 @@ function renderMilestoneCard(item: GoalItem, index: number, canEdit: boolean): s
         <span style="color: var(--forge-text-muted);">${icons.calendar} Target: ${safeTargetDate}</span>
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="color: var(--forge-text-muted);">Progress:</span>
-          <input type="range" min="0" max="100" value="${item.progressPercent}" class="milestone-progress-input" oninput="window.updateItemProgress && window.updateItemProgress('${item.boardId}', '${item.id}', this.value)" style="width: 80px; accent-color: var(--forge-primary);" />
+          <input type="range" min="0" max="100" value="${item.progressPercent}" class="milestone-progress-input" ${!isBoardApproved ? 'disabled title="Milestone progress can only be updated on approved boards"' : ''} oninput="window.updateItemProgress && window.updateItemProgress('${item.boardId}', '${item.id}', this.value)" style="width: 80px; accent-color: var(--forge-primary); ${!isBoardApproved ? 'opacity: 0.5; cursor: not-allowed;' : ''}" />
           <span id="progressVal_${item.id}" style="font-size: 0.8rem; font-weight: 700; color: var(--forge-primary); min-width: 32px;">${item.progressPercent}%</span>
         </div>
       </div>

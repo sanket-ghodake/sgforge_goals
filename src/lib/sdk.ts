@@ -7,27 +7,42 @@
 import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac, createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
 import type { AuthGuardOptions, AuthGuardResult, AuthUser, ScopedHierarchyResponse } from './types';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'forge-dev-secret-key-goals-2026';
 
-function verifyJwtSignature(headerB64: string, payloadB64: string, signatureB64: string): boolean {
-  if (process.env.NODE_ENV !== 'production' && process.env.STRICT_AUTH !== 'true') {
-    return true; // Dev token fallback for standalone & monorepo gateway proxy
-  }
+let cachedPublicKeyPem: string | null = null;
+let cachedSecret: string | null = null;
 
+/**
+ * Returns Ed25519 public key derived from JWT_SECRET (Central Forge standard)
+ * @requirements [HLR-SDK-301] [LLR-SUB-001]
+ */
+export function getVerificationPublicKey(): string {
+  const secret = process.env.JWT_SECRET || 'dev-portable-secret-key-that-is-at-least-32-characters-long';
+  if (cachedPublicKeyPem && cachedSecret === secret) {
+    return cachedPublicKeyPem;
+  }
+  const seed = createHash('sha256').update(secret).digest();
+  const pkcs8Der = Buffer.concat([
+    Buffer.from('302e020100300506032b657004220420', 'hex'),
+    seed,
+  ]);
+  const privKey = createPrivateKey({ key: pkcs8Der, format: 'der', type: 'pkcs8' });
+  const pubKey = createPublicKey(privKey);
+  cachedPublicKeyPem = pubKey.export({ type: 'spki', format: 'pem' }) as string;
+  cachedSecret = secret;
+  return cachedPublicKeyPem;
+}
+
+export function verifyJwtSignature(headerB64: string, payloadB64: string, signatureB64: string): boolean {
   const candidateSecrets = [
-    JWT_SECRET,
+    process.env.JWT_SECRET,
     process.env.SESSION_SECRET,
     process.env.AUTH_SECRET,
+    'dev-portable-secret-key-that-is-at-least-32-characters-long',
     'forge-dev-secret-key-goals-2026',
-    'sg-forge-secret-key',
-    'secret',
-    'development-jwt-secret-key',
-    'supersecret',
-    'forge-secret',
-    'dev-secret',
   ].filter((s): s is string => Boolean(s));
 
   for (const sec of candidateSecrets) {
@@ -40,6 +55,49 @@ function verifyJwtSignature(headerB64: string, payloadB64: string, signatureB64:
   }
 
   return false;
+}
+
+/**
+ * Verifies Ed25519 (EdDSA) or HMAC JWT session token signature and claims.
+ * @requirements [HLR-SDK-301] [LLR-SUB-001]
+ */
+export function verifySessionToken(token: string): { valid: boolean; payload?: any; error?: string } {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return { valid: false, error: 'Malformed token' };
+
+    const [headerB64, payloadB64, signatureB64] = parts;
+    const header = JSON.parse(Buffer.from(headerB64, 'base64url').toString('utf8'));
+    if (header.alg === 'none') {
+      return { valid: false, error: 'Invalid token algorithm: none' };
+    }
+
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && typeof payload.exp === 'number' && now > payload.exp) {
+      return { valid: false, error: 'Session token expired' };
+    }
+
+    // 1. Asymmetric Ed25519 (EdDSA) verification (Central Auth standard)
+    if (header.alg === 'EdDSA') {
+      try {
+        const dataToVerify = `${headerB64}.${payloadB64}`;
+        const signature = Buffer.from(signatureB64, 'base64url');
+        const publicKeyPem = getVerificationPublicKey();
+        const isValid = verify(null, Buffer.from(dataToVerify, 'utf8'), publicKeyPem, signature);
+        if (isValid) return { valid: true, payload };
+      } catch {}
+    }
+
+    // 2. Symmetric HMAC-SHA256 verification (test token backward compatibility)
+    if (verifyJwtSignature(headerB64, payloadB64, signatureB64)) {
+      return { valid: true, payload };
+    }
+
+    return { valid: false, error: 'Invalid token signature' };
+  } catch (err: any) {
+    return { valid: false, error: err?.message || 'Token verification error' };
+  }
 }
 
 // ==============================================================================
@@ -116,7 +174,7 @@ export function createLogger(service: string, logDir?: string): StandaloneLogger
  * @requirements [HLR-SDK-301] [LLR-SUB-001]
  */
 export function getDatabaseClient(dbFilename: string): Database {
-  const isTest = process.env.NODE_ENV === 'test' || process.env.BUN_ENV === 'test';
+  const isTest = process.env.NODE_ENV === 'test' || process.env.BUN_ENV === 'test' || Boolean(process.env.TEST) || (typeof Bun !== 'undefined' && process.argv.some(a => a.endsWith('test') || a.includes('.test.') || a.includes('/test/')));
   const submoduleRoot = join(__dirname, '..', '..');
   const dataDir = process.env.DATA_DIR || (existsSync('/app/data') ? '/app/data' : join(submoduleRoot, 'data'));
 
@@ -239,21 +297,33 @@ export function authGuard(req: Request, options: AuthGuardOptions = {}): AuthGua
   const effectiveToken = token || bearerToken;
 
   const defaultDevUser: AuthUser = {
-    id: 'usr_dev',
-    email: 'jane.doe@forge.internal',
-    displayName: 'Jane Doe',
-    roles: ['roles/employee', 'roles/manager', 'roles/admin'],
-    department: 'Platform Engineering',
+    id: 'usr_anonymous',
+    email: 'user@forge.internal',
+    displayName: 'User',
+    roles: ['roles/employee'],
+    department: 'General',
     orgId: 'org_default',
   };
 
   if (!effectiveToken) {
-    if (isDevMode && !cookieHeader.includes('goals_logged_out=true')) {
-      return { authenticated: true, user: defaultDevUser };
+    if (process.env.STRICT_AUTH === 'true') {
+      return {
+        authenticated: false,
+        response: Response.redirect(defaultRedirect, 302),
+      };
+    }
+    const isApiReq = url.pathname.includes('/api/') || (req.headers.get('accept') || '').includes('application/json');
+    if (isApiReq) {
+      return {
+        authenticated: false,
+        response: new Response(
+          JSON.stringify({ error: 'Session expired or logged out', authenticated: false, code: 'SESSION_LOGGED_OUT', redirectUrl: defaultRedirect }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        ),
+      };
     }
     return {
       authenticated: false,
-      response: Response.redirect(defaultRedirect, 302),
     };
   }
 
@@ -264,80 +334,65 @@ export function authGuard(req: Request, options: AuthGuardOptions = {}): AuthGua
       const headerJson = Buffer.from(parts[0], 'base64url').toString('utf8');
       const header = JSON.parse(headerJson);
       
-      // Reject alg: none
-      if (header.alg === 'none') {
-        return {
-          authenticated: false,
-          response: new Response('401 Unauthorized: Invalid token algorithm', { status: 401 }),
-        };
-      }
-
-      if (!verifyJwtSignature(parts[0], parts[1], parts[2])) {
-        if (isDevMode) {
-          try {
-            const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-            const user: AuthUser = {
-              id: payload.sub || payload.userId || 'usr_dev',
-              email: payload.email || 'jane.doe@forge.internal',
-              displayName: payload.displayName || payload.name || 'Jane Doe',
-              roles: Array.isArray(payload.roles) ? payload.roles : ['roles/employee', 'roles/manager', 'roles/admin'],
-              principalType: payload.principal_type || payload.principalType || 'EMPLOYEE',
-              department: payload.department || 'Platform Engineering',
-              orgId: payload.orgId || 'org_default',
-            };
-            return { authenticated: true, user };
-          } catch {
-            return { authenticated: true, user: defaultDevUser };
-          }
-        }
-        return {
-          authenticated: false,
-          response: new Response('401 Unauthorized: Invalid token signature', { status: 401 }),
-        };
-      }
-
-      const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf8');
-      const payload = JSON.parse(payloadJson);
-
-      const isApiReq = url.pathname.includes('/api/') || (req.headers.get('accept') || '').includes('application/json');
-
-      // Check token expiry
-      if (payload.exp && typeof payload.exp === 'number') {
-        const now = Math.floor(Date.now() / 1000);
-        if (now > payload.exp) {
-          const expiredMsg = '401 Unauthorized: Session token expired';
-          const expiredResp = isApiReq
-            ? new Response(JSON.stringify({ error: expiredMsg, authenticated: false, code: 'TOKEN_EXPIRED' }), {
-                status: 401,
-                headers: { 'Content-Type': 'application/json' },
-              })
-            : Response.redirect(defaultRedirect, 302);
+      const tokenResult = verifySessionToken(effectiveToken);
+      if (!tokenResult.valid) {
+        if (tokenResult.error === 'Invalid token algorithm: none') {
           return {
             authenticated: false,
-            response: expiredResp,
+            response: new Response('401 Unauthorized: Invalid token algorithm', { status: 401 }),
           };
         }
+        if (tokenResult.error === 'Session token expired') {
+          const isApiReq = url.pathname.includes('/api/') || (req.headers.get('accept') || '').includes('application/json');
+          if (isApiReq) {
+            return {
+              authenticated: false,
+              response: new Response(JSON.stringify({ error: '401 Unauthorized: Session token expired', authenticated: false, code: 'TOKEN_EXPIRED' }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            };
+          }
+          if (process.env.STRICT_AUTH === 'true') {
+            return { authenticated: false, response: Response.redirect(defaultRedirect, 302) };
+          }
+          return { authenticated: false };
+        }
+        if (process.env.STRICT_AUTH === 'true') {
+          return {
+            authenticated: false,
+            response: new Response('401 Unauthorized: Invalid token signature', { status: 401 }),
+          };
+        }
+        const isApiReq = url.pathname.includes('/api/') || (req.headers.get('accept') || '').includes('application/json');
+        if (isApiReq) {
+          return {
+            authenticated: false,
+            response: new Response(JSON.stringify({ error: '401 Unauthorized: Invalid token signature', authenticated: false, code: 'TOKEN_INVALID' }), {
+              status: 401,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          };
+        }
+        return { authenticated: false };
       }
 
+      const payload = tokenResult.payload;
+      const effectiveSub = payload.sub || payload.userId || payload.user_id || 'usr_anonymous';
       const user: AuthUser = {
-        id: payload.sub || payload.userId || payload.user_id || 'usr_dev',
-        email: payload.email || req.headers.get('x-user-email') || 'jane.doe@forge.internal',
-        displayName: payload.display_name || payload.displayName || payload.name || req.headers.get('x-user-name') || 'Jane Doe',
+        id: effectiveSub,
+        email: payload.email || req.headers.get('x-user-email') || `${effectiveSub}@forge.internal`,
+        displayName: payload.display_name || payload.displayName || payload.name || req.headers.get('x-user-name') || effectiveSub,
         roles: Array.isArray(payload.roles) ? payload.roles : ['roles/employee'],
         principalType: payload.principal_type || payload.principalType || 'EMPLOYEE',
-        department: payload.department || req.headers.get('x-user-department') || 'Platform Engineering',
+        department: payload.department || req.headers.get('x-user-department') || undefined,
         orgId: payload.org_id || payload.orgId || 'org_default',
         managerId: payload.manager_id ?? payload.managerId ?? (req.headers.get('x-user-manager-id') || null),
         managerName: payload.manager_name ?? payload.managerName ?? (req.headers.get('x-user-manager-name') || null),
         managerEmail: payload.manager_email ?? payload.managerEmail ?? (req.headers.get('x-user-manager-email') || null),
+        jobTitle: payload.job_title ?? payload.jobTitle ?? null,
+        employeeCode: payload.employee_code ?? payload.employeeCode ?? null,
       };
-
-      if (!verifyJwtSignature(parts[0], parts[1], parts[2]) && !isDevMode) {
-        return {
-          authenticated: false,
-          response: new Response('401 Unauthorized: Invalid token signature', { status: 401 }),
-        };
-      }
 
       if (options.requiredRoles && options.requiredRoles.length > 0) {
         const hasRole = options.requiredRoles.some((r) => user.roles.includes(r) || user.roles.includes('roles/super_admin'));
@@ -353,13 +408,26 @@ export function authGuard(req: Request, options: AuthGuardOptions = {}): AuthGua
     }
   } catch {}
 
-  if (isDevMode && !effectiveToken) {
-    return { authenticated: true, user: defaultDevUser };
+  if (process.env.STRICT_AUTH === 'true') {
+    return {
+      authenticated: false,
+      response: Response.redirect(defaultRedirect, 302),
+    };
+  }
+
+  const isApiReq = url.pathname.includes('/api/') || (req.headers.get('accept') || '').includes('application/json');
+  if (isApiReq) {
+    return {
+      authenticated: false,
+      response: new Response(
+        JSON.stringify({ error: 'Session expired or logged out', authenticated: false, code: 'SESSION_LOGGED_OUT', redirectUrl: defaultRedirect }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      ),
+    };
   }
 
   return {
     authenticated: false,
-    response: Response.redirect(defaultRedirect, 302),
   };
 }
 
@@ -381,24 +449,14 @@ export function loadBrandConfig() {
  * getScopedHierarchy
  * @requirements [HLR-SDK-301] [LLR-SUB-001]
  */
-export function getScopedHierarchy(_userIdOrReq?: string | Request): ScopedHierarchyResponse {
-  return {
-    employee: {
-      id: 'emp_01',
-      displayName: 'Assigned Engineer',
-      email: 'engineer@forge.internal',
-      departmentName: 'Autonomous Squad',
-    },
-    managementChain: [
-      {
-        id: 'mgr_01',
-        displayName: 'Engineering Lead',
-        email: 'lead@forge.internal',
-        roleTitle: 'Squad Lead',
-      },
-    ],
-  };
-}
+export {
+  resolveAuthBaseUrl,
+  createEd25519ServiceToken,
+  fetchEmployeeHierarchy,
+  fetchEmployeesList,
+  getScopedHierarchy,
+  checkEmployeeIsManager,
+} from './directory-client';
 
 const SENSITIVE_KEY_REGEX = /pass(word)?|token|secret|auth|bearer|credential|key/i;
 const BEARER_REGEX = /Bearer\s+([A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*)/gi;
@@ -428,4 +486,3 @@ export function redactSensitiveData(data: unknown, depth = 0): unknown {
   }
   return data;
 }
-

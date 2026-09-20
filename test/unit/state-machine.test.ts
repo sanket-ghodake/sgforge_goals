@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { createBoard, getBoardById, submitBoard, updateGoalItems } from '../../src/backend/services/board-service';
+import { createBoard, createProjectRecord, getBoardById, submitBoard, updateGoalItems } from '../../src/backend/services/board-service';
 import { approveBoard, requestRework } from '../../src/backend/services/review-service';
 import type { AuthUser } from '../../src/lib/types';
 
@@ -26,10 +26,18 @@ describe('Tier 1 Unit: Goal Board State Machine & Lock Lifecycle', () => {
     orgId: 'org_test_unit',
   };
 
+  const testProject = createProjectRecord({
+    name: 'Unit Test Project',
+    code: 'UNIT',
+    description: 'Dynamic project for state machine testing',
+    managerId: managerUser.id,
+    orgId: 'org_test_unit',
+  });
+
   it('Arrange, Act, Assert: creates board in DRAFT status with initial lock_version=1', () => {
     // Arrange
     const input = {
-      projectId: 'proj_titan',
+      projectId: testProject.id,
       title: 'Unit Test Flight Plan',
       cycle: '2026-Q1',
     };
@@ -48,7 +56,7 @@ describe('Tier 1 Unit: Goal Board State Machine & Lock Lifecycle', () => {
   it('Arrange, Act, Assert: rejects submission when total weight does not equal 100%', () => {
     // Arrange
     const board = createBoard({
-      projectId: 'proj_titan',
+      projectId: testProject.id,
       title: 'Weight Validation Plan',
       cycle: '2026-Q1',
     }, testUser);
@@ -72,7 +80,7 @@ describe('Tier 1 Unit: Goal Board State Machine & Lock Lifecycle', () => {
   it('Arrange, Act, Assert: locks board upon submission and rejects mutations with 423 Locked', () => {
     // Arrange: Create board with valid 100% weight
     const board = createBoard({
-      projectId: 'proj_titan',
+      projectId: testProject.id,
       title: 'Lock Test Plan',
       cycle: '2026-Q1',
     }, testUser);
@@ -122,7 +130,7 @@ describe('Tier 1 Unit: Goal Board State Machine & Lock Lifecycle', () => {
   it('Arrange, Act, Assert: executes complete review, rework, resubmit, and approval lifecycle', () => {
     // 1. Arrange & Submit
     const board = createBoard({
-      projectId: 'proj_titan',
+      projectId: testProject.id,
       title: 'Full Lifecycle Plan',
       cycle: '2026-Q1',
     }, testUser);
@@ -182,7 +190,7 @@ describe('Tier 1 Unit: Goal Board State Machine & Lock Lifecycle', () => {
     };
 
     const board = createBoard({
-      projectId: 'proj_titan',
+      projectId: testProject.id,
       title: 'Solo Unmanaged Plan',
       cycle: '2026-Q1',
     }, unmanagedUser);

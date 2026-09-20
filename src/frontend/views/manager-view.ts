@@ -10,9 +10,19 @@ import { escapeHtml, getStatusBadge } from '../../lib/ui';
 import type { AuthUser, GoalBoard, Project } from '../../lib/types';
 
 export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects: Project[]): string {
+  const isManagerOrAdmin = user.roles.includes('roles/manager') || user.roles.includes('roles/admin') || user.roles.includes('roles/super_admin');
   const myBoards = boards.filter(b => b.ownerId === user.id);
-  // Real team boards owned by direct reports / colleagues
-  const teamBoards = boards.filter(b => b.ownerId !== user.id);
+
+  // Real team boards: only non-draft boards submitted for review or approval
+  const teamBoards = isManagerOrAdmin ? boards.filter(b => {
+    if (b.ownerId === user.id) return false;
+    // Private drafts are strictly private to the author until submitted
+    if (b.status === 'DRAFT') return false;
+    if (user.roles.includes('roles/admin') || user.roles.includes('roles/super_admin')) return true;
+    if (b.managerName && user.displayName && b.managerName.toLowerCase() === user.displayName.toLowerCase()) return true;
+    if (b.ownerDepartment && user.department && b.ownerDepartment === user.department) return true;
+    return true;
+  }) : [];
 
   // Metric counts for My Submissions
   const mySubmittedCount = myBoards.filter(b => b.status === 'SUBMITTED').length;
@@ -108,27 +118,27 @@ export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects:
             return `
               <div style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; backdrop-filter: blur(12px); transition: border-color 0.2s ease, transform 0.2s ease;" onmouseover="this.style.borderColor='var(--forge-border-medium)'" onmouseout="this.style.borderColor='var(--forge-border)'">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                  <span style="font-size: 0.75rem; font-weight: 600; color: var(--forge-primary);">${b.projectName || 'Project'}</span>
+                  <span style="font-size: 0.75rem; font-weight: 600; color: var(--forge-primary);">${escapeHtml(b.projectName || 'Project')}</span>
                   <span style="font-size: 0.75rem; font-weight: 600; padding: 3px 10px; border-radius: 9999px; ${statusBadge.style}">
                     ${statusBadge.label}
                   </span>
                 </div>
 
                 <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; line-height: 1.3;">
-                  <a href="?tab=board&id=${b.id}" onclick="navigateSpa('board', '${b.id}', event)" style="color: var(--forge-text-main); text-decoration: none;">${b.title}</a>
+                  <a href="?tab=board&id=${encodeURIComponent(b.id)}" onclick="navigateSpa('board', '${escapeHtml(b.id)}', event)" style="color: var(--forge-text-main); text-decoration: none;">${escapeHtml(b.title)}</a>
                 </h3>
 
                 <div style="font-size: 0.8rem; color: var(--forge-text-muted); margin-bottom: 18px; display: flex; gap: 14px;">
-                  <span>${icons.calendar} ${b.cycle}</span>
-                  <span>${icons.layers} Rev ${b.revisionNumber}</span>
+                  <span>${icons.calendar} ${escapeHtml(b.cycle)}</span>
+                  <span>${icons.layers} Rev ${Number(b.revisionNumber) || 1}</span>
                   <span>${icons.clock} ${new Date(b.updatedAt).toLocaleDateString()}</span>
                 </div>
 
                 <div style="margin-top: auto; padding-top: 14px; border-top: 1px solid var(--forge-border); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
-                  <button class="btn-action btn-outline" style="font-size: 0.775rem;" onclick="openReviewDrawer('${b.id}')">
+                  <button class="btn-action btn-outline" style="font-size: 0.775rem;" onclick="openReviewDrawer('${escapeHtml(b.id)}')">
                     ${icons.messageSquare} Review Timeline
                   </button>
-                  <a href="?tab=board&id=${b.id}" onclick="navigateSpa('board', '${b.id}', event)" class="btn-action btn-primary" style="font-size: 0.775rem;">
+                  <a href="?tab=board&id=${encodeURIComponent(b.id)}" onclick="navigateSpa('board', '${escapeHtml(b.id)}', event)" class="btn-action btn-primary" style="font-size: 0.775rem;">
                     Canvas ${icons.arrowRight}
                   </a>
                 </div>
@@ -214,8 +224,8 @@ export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects:
               <div class="team-board-card" data-status="${b.status}" style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; backdrop-filter: blur(12px); transition: border-color 0.2s ease, transform 0.2s ease;" onmouseover="this.style.borderColor='var(--forge-border-medium)'" onmouseout="this.style.borderColor='var(--forge-border)'">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                   <div>
-                    <span style="font-size: 0.75rem; font-weight: 700; color: var(--forge-primary); display: block;">${b.ownerName}</span>
-                    <span style="font-size: 0.7rem; color: var(--forge-text-muted);">${b.ownerDepartment}</span>
+                    <span style="font-size: 0.75rem; font-weight: 700; color: var(--forge-primary); display: block;">${escapeHtml(b.ownerName)}</span>
+                    <span style="font-size: 0.7rem; color: var(--forge-text-muted);">${escapeHtml(b.ownerDepartment)}</span>
                   </div>
                   <span style="font-size: 0.75rem; font-weight: 600; padding: 3px 10px; border-radius: 9999px; ${statusBadge.style}">
                     ${statusBadge.label}
@@ -223,28 +233,28 @@ export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects:
                 </div>
 
                 <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; line-height: 1.3;">
-                  <a href="?tab=board&id=${b.id}" onclick="navigateSpa('board', '${b.id}', event)" style="color: var(--forge-text-main); text-decoration: none;">${b.title}</a>
+                  <a href="?tab=board&id=${encodeURIComponent(b.id)}" onclick="navigateSpa('board', '${escapeHtml(b.id)}', event)" style="color: var(--forge-text-main); text-decoration: none;">${escapeHtml(b.title)}</a>
                 </h3>
 
                 <div style="font-size: 0.8rem; color: var(--forge-text-muted); margin-bottom: 16px; display: flex; gap: 12px;">
-                  <span>${icons.folder} ${b.projectName || 'Project'}</span>
-                  <span>${icons.calendar} ${b.cycle}</span>
-                  <span>Rev ${b.revisionNumber}</span>
+                  <span>${icons.folder} ${escapeHtml(b.projectName || 'Project')}</span>
+                  <span>${icons.calendar} ${escapeHtml(b.cycle)}</span>
+                  <span>Rev ${Number(b.revisionNumber) || 1}</span>
                 </div>
 
                 <div style="margin-top: auto; padding-top: 14px; border-top: 1px solid var(--forge-border); display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
-                  <button class="btn-action btn-primary" style="font-size: 0.775rem; flex: 1;" onclick="openReviewDrawer('${b.id}')">
+                  <button class="btn-action btn-primary" style="font-size: 0.775rem; flex: 1;" onclick="openReviewDrawer('${escapeHtml(b.id)}')">
                     ${icons.messageSquare} Review Timeline
                   </button>
                   ${b.status === 'SUBMITTED' || b.status === 'UNLOCK_REQUESTED' || b.status === 'LOCKED_OVERDUE' || b.status === 'REWORK_REQUESTED' ? `
-                    <button class="btn-action btn-outline" style="font-size: 0.75rem; color: var(--forge-warning); border-color: rgba(245, 158, 11, 0.3);" onclick="openReworkModal('${b.id}', '${b.title.replace(/'/g, "\\'")}')">
+                    <button class="btn-action btn-outline" style="font-size: 0.75rem; color: var(--forge-warning); border-color: rgba(245, 158, 11, 0.3);" data-board-id="${escapeHtml(b.id)}" onclick="openReworkModal(this.dataset.boardId)">
                       ${icons.alertCircle} Rework
                     </button>
-                    <button class="btn-action btn-outline" style="font-size: 0.75rem; color: var(--forge-success); border-color: rgba(16, 185, 129, 0.3);" onclick="handleApproveBoard('${b.id}')">
+                    <button class="btn-action btn-outline" style="font-size: 0.75rem; color: var(--forge-success); border-color: rgba(16, 185, 129, 0.3);" onclick="handleApproveBoard('${escapeHtml(b.id)}')">
                       ${icons.award} Approve
                     </button>
                   ` : b.status === 'APPROVED' ? `
-                    <button class="btn-action btn-outline" style="font-size: 0.75rem; color: var(--forge-warning); border-color: rgba(245, 158, 11, 0.3);" onclick="openReworkModal('${b.id}', '${b.title.replace(/'/g, "\\'")}')">
+                    <button class="btn-action btn-outline" style="font-size: 0.75rem; color: var(--forge-warning); border-color: rgba(245, 158, 11, 0.3);" data-board-id="${escapeHtml(b.id)}" onclick="openReworkModal(this.dataset.boardId)">
                       ${icons.alertCircle} Move to Rework
                     </button>
                   ` : ''}
@@ -252,45 +262,6 @@ export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects:
               </div>
             `;
           }).join('')}
-        </div>
-      </div>
-
-      <!-- SECTION 2: My Submissions Pane (Hidden by Default) -->
-      <div id="mySubmissionsContainer" style="display: none;">
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px;">
-          ${myBoards.map(b => {
-            const statusBadge = getStatusBadge(b.status);
-            const safeTitle = escapeHtml(b.title);
-            return `
-              <div style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 16px; padding: 22px; display: flex; flex-direction: column;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                  <span style="font-size: 0.75rem; font-weight: 600; padding: 3px 10px; border-radius: 9999px; ${statusBadge.style}">
-                    ${statusBadge.label}
-                  </span>
-                  <span style="font-size: 0.75rem; color: var(--forge-text-muted);">Rev ${b.revisionNumber}</span>
-                </div>
-
-                <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 6px;">
-                  <a href="?tab=board&id=${b.id}" onclick="navigateSpa('board', '${b.id}', event)" style="color: var(--forge-text-main); text-decoration: none;">${safeTitle}</a>
-                </h3>
-
-                <div style="font-size: 0.8rem; color: var(--forge-text-muted); margin-bottom: 16px; display: flex; gap: 12px;">
-                  <span>${icons.folder} ${escapeHtml(b.projectName || 'Project')}</span>
-                  <span>${icons.calendar} ${escapeHtml(b.cycle)}</span>
-                </div>
-
-                <div style="margin-top: auto; padding-top: 14px; border-top: 1px solid var(--forge-border); display: flex; gap: 8px;">
-                  <button class="btn-action btn-outline" style="font-size: 0.775rem; flex: 1;" onclick="openReviewDrawer('${b.id}')">
-                    ${icons.messageSquare} Feedback History
-                  </button>
-                  <a href="?tab=board&id=${b.id}" onclick="navigateSpa('board', '${b.id}', event)" class="btn-action btn-primary" style="font-size: 0.775rem;">
-                    Open Board
-                  </a>
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
       </div>
     </div>
 

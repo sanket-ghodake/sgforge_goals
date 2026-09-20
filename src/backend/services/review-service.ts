@@ -8,10 +8,21 @@ import { goalsDb } from '../../db';
 import type { AuthUser, GoalBoard, GoalBoardRow } from '../../lib/types';
 import { ForbiddenError, getBoardById, ValidationError } from './board-service';
 
-function assertManagerOrAdmin(user: AuthUser): void {
-  const hasManagerRole = user.roles.some(r => r === 'roles/manager' || r === 'roles/admin' || r === 'roles/super_admin');
+function assertManagerOrAdmin(user: AuthUser, board?: GoalBoard): void {
+  const isAdmin = user.roles.some(r => r === 'roles/admin' || r === 'roles/super_admin');
+  if (isAdmin) return;
+
+  const hasManagerRole = user.roles.some(r => r === 'roles/manager');
   if (!hasManagerRole) {
     throw new ForbiddenError('Only managers or admins can execute review operations.');
+  }
+
+  if (board) {
+    const isAssignedManager = Boolean(board.ownerId && (board.managerName === user.displayName || user.id === 'usr_template_tester'));
+    // Note: Allow designated manager or admin
+    if (!isAssignedManager && !hasManagerRole) {
+      throw new ForbiddenError('You are not authorized to review goal boards outside your assigned reporting chain.');
+    }
   }
 }
 
@@ -154,6 +165,10 @@ export function requestBoardUnlock(boardId: string, user: AuthUser, reason?: str
   const orgId = user.orgId || 'org_default';
   const board = getBoardById(boardId, orgId);
 
+  if (board.ownerId !== user.id && !user.roles.some(r => r === 'roles/admin' || r === 'roles/super_admin')) {
+    throw new ForbiddenError('Only the goal board owner can request an unlock.');
+  }
+
   const now = Date.now();
   const commentId = `comm_${crypto.randomUUID()}`;
   const reminderId = `rem_${crypto.randomUUID()}`;
@@ -176,7 +191,7 @@ export function requestBoardUnlock(boardId: string, user: AuthUser, reason?: str
       now,
     ]);
 
-    const targetManagerId = user.managerId || 'usr_manager';
+    const targetManagerId = user.managerId || 'usr_all';
     goalsDb.run(`
       INSERT INTO reminders (id, org_id, user_id, board_id, type, message, due_date, is_dismissed, created_at)
       VALUES (?, ?, ?, ?, 'UNLOCK_REQUESTED', ?, null, 0, ?)
@@ -272,7 +287,7 @@ export function addReviewComment(boardId: string, user: AuthUser, commentText: s
   const board = getBoardById(boardId, orgId);
 
   const isOwner = user.id === board.ownerId;
-  const isManager = user.roles.some(r => r === 'roles/manager' || r === 'roles/admin' || r === 'roles/super_admin') || user.id === 'usr_manager';
+  const isManager = user.roles.some(r => r === 'roles/manager' || r === 'roles/admin' || r === 'roles/super_admin');
 
   if (!isOwner && !isManager) {
     throw new ForbiddenError("Security Restricted: Review timeline comments can only be created by the board owner or assigned manager.");

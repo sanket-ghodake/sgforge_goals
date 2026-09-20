@@ -22,6 +22,8 @@ function show_help() {
     echo "  worklog <msg>         Append task completion to logs/WORKLOGS.md"
     echo ""
     echo "Docker Lifecycle & Ergonomic Aliases:"
+    echo "  docker dev [cmd]      Start/manage hot-reload dev container stack (docker/dev/)"
+    echo "  docker prod [cmd]     Start/manage optimized production container stack (docker/prod/)"
     echo "  up [opt]              Start micro-app via standalone Docker Compose"
     echo "  down                  Gracefully stop active Docker containers"
     echo "  ps / status           Show status of micro-app Docker containers"

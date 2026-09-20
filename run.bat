@@ -240,15 +240,34 @@ if "%CMD%"=="build" (
     goto :eof
 )
 
+if "%CMD%"=="docker:dev" goto :do_docker_dev
+if "%CMD%"=="docker:prod" goto :do_docker_prod
 if "%CMD%"=="compose" goto :do_compose
 if "%CMD%"=="docker" goto :do_compose
 goto :not_compose
 :do_compose
-echo 🐳 Running standalone Docker Compose...
 shift
+set "SUB_CMD=%~1"
+if "!SUB_CMD!"=="dev" goto :do_docker_dev
+if "!SUB_CMD!"=="prod" goto :do_docker_prod
+echo 🐳 Running standalone Docker Compose...
 set "DOCKER_ARGS=%*"
 if "%DOCKER_ARGS%"=="" set "DOCKER_ARGS=up -d"
 docker compose %DOCKER_ARGS%
+goto :eof
+:do_docker_dev
+shift
+set "DOCKER_ARGS=%*"
+if "%DOCKER_ARGS%"=="" set "DOCKER_ARGS=up -d --build"
+echo 🐳 Starting standalone Docker dev stack...
+docker compose -p forge-app-goals-dev -f docker\dev\docker-compose.yml %DOCKER_ARGS%
+goto :eof
+:do_docker_prod
+shift
+set "DOCKER_ARGS=%*"
+if "%DOCKER_ARGS%"=="" set "DOCKER_ARGS=up -d --build"
+echo 🚀 Starting standalone Docker prod stack...
+docker compose -p forge-app-goals-prod -f docker\prod\docker-compose.yml %DOCKER_ARGS%
 goto :eof
 :not_compose
 

@@ -14,8 +14,7 @@ COPY package.json bun.lock* tsconfig.json ./
 RUN if [ -f bun.lock ] || [ -f bun.lockb ] || grep -q '"dependencies": {' package.json; then bun install 2>/dev/null || true; fi
 
 COPY src/ ./src/
-COPY data/ ./data/
-COPY logs/ ./logs/
+RUN mkdir -p /app/data /app/logs
 
 EXPOSE 8090
 

@@ -9,6 +9,14 @@ import { escapeHtml } from '../../lib/ui';
 import type { AuthUser, Reminder } from '../../lib/types';
 
 export function renderNewBoardModal(): string {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
+  const currentCycle = `${currentYear}-Q${currentQuarter}`;
+  const nextQuarter = currentQuarter === 4 ? 1 : currentQuarter + 1;
+  const nextYear = currentQuarter === 4 ? currentYear + 1 : currentYear;
+  const nextCycle = `${nextYear}-Q${nextQuarter}`;
+
   return `
   <!-- New Board Modal -->
   <div class="modal-backdrop" id="newBoardModal" onclick="if(event.target === this) closeNewBoardModal()">
@@ -20,24 +28,39 @@ export function renderNewBoardModal(): string {
 
       <form id="newBoardForm" onsubmit="handleCreateBoard(event)">
         <div style="margin-bottom: 14px;">
-          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--forge-text-muted);">Assigned Project</label>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label style="font-size: 0.8rem; font-weight: 600; color: var(--forge-text-muted);">Assigned Project</label>
+            <button type="button" onclick="toggleQuickProjectCreation()" style="background: none; border: none; color: var(--forge-primary); font-size: 0.75rem; cursor: pointer; padding: 0;">
+              + New Project
+            </button>
+          </div>
+          
           <select id="boardProjectSelect" class="shadcn-select" required>
-            <option value="proj_titan">Project Titan (Core API Gateway)</option>
-            <option value="proj_apollo">Project Apollo (Telemetry Agent)</option>
-            <option value="proj_hermes">Project Hermes (Edge Storage Fabric)</option>
+            <option value="" disabled selected>Select an active project...</option>
           </select>
+
+          <!-- Inline Quick Project Creation Container -->
+          <div id="quickProjectContainer" style="display: none; margin-top: 8px; padding: 10px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border); border-radius: 8px;">
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-bottom: 6px;">
+              <input id="quickProjectName" type="text" placeholder="Project Name (e.g. Core Telemetry)" style="height: 32px; border-radius: 6px; background: var(--forge-bg-card); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 0 8px; font-size: 0.8rem;" />
+              <input id="quickProjectCode" type="text" placeholder="CODE" style="height: 32px; border-radius: 6px; background: var(--forge-bg-card); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 0 8px; font-size: 0.8rem; text-transform: uppercase;" />
+            </div>
+            <button type="button" onclick="handleQuickCreateProject()" class="btn-action btn-outline" style="height: 28px; font-size: 0.75rem; width: 100%;">
+              Save & Select Project
+            </button>
+          </div>
         </div>
 
         <div style="margin-bottom: 14px;">
           <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--forge-text-muted);">Board Title</label>
-          <input id="boardTitleInput" type="text" placeholder="e.g. Q1 Distributed Mesh Resilience" required style="width: 100%; height: 38px; border-radius: 7px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 0 12px; font-size: 0.875rem;" />
+          <input id="boardTitleInput" type="text" placeholder="e.g. Production Deployment & Reliability Verification" required style="width: 100%; height: 38px; border-radius: 7px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 0 12px; font-size: 0.875rem;" />
         </div>
 
         <div style="margin-bottom: 20px;">
           <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--forge-text-muted);">Evaluation Cycle</label>
           <select id="boardCycleSelect" class="shadcn-select" required>
-            <option value="2026-Q1">2026-Q1 (Current Active)</option>
-            <option value="2026-Q2">2026-Q2 (Upcoming)</option>
+            <option value="${currentCycle}">${currentCycle} (Current Active)</option>
+            <option value="${nextCycle}">${nextCycle} (Upcoming)</option>
           </select>
         </div>
 
@@ -105,7 +128,7 @@ export function renderReworkModal(): string {
         <input type="hidden" id="reworkBoardId" />
         <div style="margin-bottom: 16px;">
           <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--forge-text-muted);">Revision Guidance & Critique</label>
-          <textarea id="reworkCommentText" required rows="4" placeholder="e.g. Please clarify milestone #2 metrics and specify testing tools before final signoff." style="width: 100%; border-radius: 8px; background: var(--forge-bg-card); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 10px; font-size: 0.875rem;"></textarea>
+          <textarea id="reworkCommentText" required rows="4" placeholder="e.g. Please clarify milestone deliverables and testing harness." style="width: 100%; border-radius: 8px; background: var(--forge-bg-card); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 10px; font-size: 0.875rem;"></textarea>
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: 10px;">
@@ -132,7 +155,7 @@ export function renderLogoutModal(user: AuthUser): string {
       </div>
 
       <p style="font-size: 0.875rem; color: var(--forge-text-muted); margin-bottom: 20px; line-height: 1.5;">
-        Are you sure you want to end your active session as <strong style="color: var(--forge-text-main);">${escapeHtml(user.displayName)}</strong> (${escapeHtml(user.department || 'Engineering')})?
+        Are you sure you want to end your active session as <strong style="color: var(--forge-text-main);">${escapeHtml(user.displayName)}</strong> (${escapeHtml(user.department || 'Organization')})?
       </p>
 
       <div style="display: flex; justify-content: flex-end; gap: 10px;">
@@ -140,55 +163,6 @@ export function renderLogoutModal(user: AuthUser): string {
         <button type="button" class="btn-action btn-primary" style="background: var(--forge-error); color: #fff;" onclick="confirmLogout()">
           ${icons.logOut} Sign Out
         </button>
-      </div>
-    </div>
-  </div>`;
-}
-
-export function renderLoginModal(): string {
-  return `
-  <!-- Login / Persona Switcher Modal Dialog -->
-  <div class="modal-backdrop" id="loginModal" onclick="if(event.target === this) closeLoginModal()">
-    <div class="modal-box" style="max-width: 480px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--forge-primary); display: flex; align-items: center; gap: 8px;">
-          ${icons.logIn} Select Persona Account / Login
-        </h3>
-        <button class="btn-icon" onclick="closeLoginModal()">${icons.close}</button>
-      </div>
-
-      <p style="font-size: 0.85rem; color: var(--forge-text-muted); margin-bottom: 16px;">
-        Select an employee profile to simulate real-time hierarchy permissions and review workflows:
-      </p>
-
-      <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
-        <div onclick="selectPersona('employee')" style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 12px; padding: 14px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s ease;" onmouseover="this.style.borderColor='var(--forge-primary)'" onmouseout="this.style.borderColor='var(--forge-border)'">
-          <div>
-            <div style="font-size: 0.9rem; font-weight: 700; color: var(--forge-text-main);">Jane Doe (Contributor)</div>
-            <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Platform Engineering &bull; Manager: Sarah Connor</div>
-          </div>
-          <span class="btn-action btn-outline" style="font-size: 0.75rem;">Select</span>
-        </div>
-
-        <div onclick="selectPersona('solo')" style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 12px; padding: 14px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s ease;" onmouseover="this.style.borderColor='var(--forge-warning)'" onmouseout="this.style.borderColor='var(--forge-border)'">
-          <div>
-            <div style="font-size: 0.9rem; font-weight: 700; color: var(--forge-text-main);">Morgan Lee (No Manager)</div>
-            <div style="font-size: 0.75rem; color: var(--forge-warning);">Independent Operations &bull; Manager: Unassigned</div>
-          </div>
-          <span class="btn-action btn-outline" style="font-size: 0.75rem;">Select</span>
-        </div>
-
-        <div onclick="selectPersona('manager')" style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 12px; padding: 14px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s ease;" onmouseover="this.style.borderColor='var(--forge-success)'" onmouseout="this.style.borderColor='var(--forge-border)'">
-          <div>
-            <div style="font-size: 0.9rem; font-weight: 700; color: var(--forge-text-main);">Sarah Connor (Engineering Lead)</div>
-            <div style="font-size: 0.75rem; color: var(--forge-success);">Platform Engineering &bull; 3 Direct Reports</div>
-          </div>
-          <span class="btn-action btn-outline" style="font-size: 0.75rem;">Select</span>
-        </div>
-      </div>
-
-      <div style="display: flex; justify-content: flex-end;">
-        <button type="button" class="btn-action btn-outline" onclick="closeLoginModal()">Close</button>
       </div>
     </div>
   </div>`;

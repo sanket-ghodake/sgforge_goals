@@ -7,10 +7,14 @@
 import { join } from 'node:path';
 import {
   authGuard,
+  checkEmployeeIsManager,
   createLogger,
   createSafeHandler,
+  fetchEmployeeHierarchy,
+  fetchEmployeesList,
 } from './lib/sdk';
 import { handleDocsRoute } from './lib/docs-viewer';
+import { cleanDisplayName } from './lib/ui';
 import type { AuthUser } from './lib/types';
 import { renderLayout } from './frontend/views/layout';
 import { renderDashboardView } from './frontend/views/dashboard-view';
@@ -18,9 +22,9 @@ import { renderBoardsView } from './frontend/views/boards-view';
 import { renderBoardView } from './frontend/views/board-view';
 import { renderManagerView } from './frontend/views/manager-view';
 import { renderExploreView } from './frontend/views/explore-view';
-import { renderLoginView } from './frontend/views/login-view';
-import { getUserById, listUsers, upsertUser } from './db';
-import { createBoard, getBoardById, listBoards, listProjects, submitBoard, updateGoalItems, updateItemProgress } from './backend/services/board-service';
+import { renderLeadershipRestrictedView, renderLoginView } from './frontend/views/login-view';
+import { getUserById, isLocalManager, listUsers, upsertUser } from './db';
+import { createBoard, createProjectRecord, getBoardById, listBoards, listProjects, submitBoard, updateGoalItems, updateItemProgress } from './backend/services/board-service';
 import { approveBoard, addReviewComment, requestRework, requestBoardUnlock, unlockBoard, setSubmissionDeadline } from './backend/services/review-service';
 import { dismissReminder, listUserReminders } from './backend/services/reminder-service';
 
@@ -29,39 +33,96 @@ const DOCS_DIR = join(import.meta.dir, '..', 'docs');
 const logger = createLogger('goals', LOG_DIR);
 const PORT = Number(process.env.PORT || 8090);
 
-function getEffectiveUser(baseUser: AuthUser, req: Request): AuthUser {
-  const cookieHeader = req.headers.get('cookie') || '';
-  
-  // Dev persona override for explicit testing toggles
-  if (cookieHeader.includes('goals_persona=manager')) {
-    const mgr = getUserById('usr_manager');
-    if (mgr) return mgr;
-  } else if (cookieHeader.includes('goals_persona=solo')) {
-    const solo = getUserById('usr_solo');
-    if (solo) return solo;
-  } else if (cookieHeader.includes('goals_persona=employee')) {
-    const emp = getUserById('usr_employee');
-    if (emp) return emp;
+const profileCache = new Map<string, { user: AuthUser; timestamp: number }>();
+const PROFILE_TTL_MS = 5 * 60 * 1000; // 5-minute TTL
+
+async function syncEmployeeProfile(baseUser: AuthUser, req?: Request): Promise<AuthUser> {
+  if (!baseUser || !baseUser.id) return baseUser;
+
+  const cached = profileCache.get(baseUser.id);
+  if (cached && Date.now() - cached.timestamp < PROFILE_TTL_MS) {
+    return cached.user;
   }
 
+  const localUser = getUserById(baseUser.id);
+
+  try {
+    const searchParam = baseUser.email || baseUser.id;
+    const empRoster = await fetchEmployeesList({ search: searchParam, incomingReq: req });
+    let match: any = null;
+
+    if (empRoster && empRoster.items && empRoster.items.length > 0) {
+      match = empRoster.items.find((i: any) =>
+        i.id === baseUser.id ||
+        (baseUser.email && i.email?.toLowerCase() === baseUser.email.toLowerCase())
+      ) || empRoster.items[0];
+    }
+
+    const effectiveId = match?.id || baseUser.id;
+    const hierarchy = await fetchEmployeeHierarchy(effectiveId, { incomingReq: req });
+
+    if ((hierarchy && hierarchy.user) || match) {
+      const primaryMgr = hierarchy?.managementChain && hierarchy.managementChain.length > 0
+        ? hierarchy.managementChain[0]
+        : null;
+
+      const department = match?.department_name || 
+        baseUser.department || 
+        localUser?.department || 
+        'General';
+
+      const jobTitle = match?.job_title || baseUser.jobTitle || localUser?.jobTitle || (primaryMgr ? 'Team Member' : 'Lead');
+      const employeeCode = match?.employee_code || baseUser.employeeCode || localUser?.employeeCode || null;
+      const managerId = primaryMgr?.id || match?.manager_id || localUser?.managerId || null;
+      const managerName = primaryMgr?.display_name || match?.manager_name || localUser?.managerName || null;
+      const managerEmail = primaryMgr?.email || match?.manager_email || localUser?.managerEmail || null;
+
+      const enriched: AuthUser = {
+        id: baseUser.id,
+        email: match?.email || hierarchy?.user?.email || baseUser.email,
+        displayName: cleanDisplayName(match?.display_name || hierarchy?.user?.display_name || baseUser.displayName),
+        roles: baseUser.roles && baseUser.roles.length > 0 ? baseUser.roles : ['roles/employee'],
+        department,
+        orgId: match?.org_id || baseUser.orgId || 'org_default',
+        managerId,
+        managerName: cleanDisplayName(primaryMgr?.display_name || match?.manager_name || localUser?.managerName || null) || null,
+        managerEmail,
+        jobTitle,
+        employeeCode,
+      };
+
+      const saved = upsertUser(enriched);
+      profileCache.set(baseUser.id, { user: saved, timestamp: Date.now() });
+      return saved;
+    }
+  } catch (err) {
+    logger.warn('Failed to sync employee profile with Central Directory:', { error: String(err) });
+  }
+
+  if (localUser) {
+    profileCache.set(baseUser.id, { user: localUser, timestamp: Date.now() });
+    return localUser;
+  }
+  const saved = upsertUser(baseUser);
+  profileCache.set(baseUser.id, { user: saved, timestamp: Date.now() });
+  return saved;
+}
+
+async function getEffectiveUser(baseUser: AuthUser, req: Request): Promise<AuthUser> {
   if (baseUser && baseUser.id) {
-    return upsertUser(baseUser);
+    return await syncEmployeeProfile(baseUser, req);
   }
-
-  const targetUserId = 'usr_employee';
-  const dbUser = getUserById(targetUserId);
-  if (dbUser) return dbUser;
 
   return {
-    id: 'usr_employee',
-    email: 'jane.doe@forge.internal',
-    displayName: 'Jane Doe',
+    id: 'usr_current',
+    email: 'user@forge.internal',
+    displayName: 'Current User',
     roles: ['roles/employee'],
-    department: 'Platform Engineering',
+    department: 'General',
     orgId: 'org_default',
-    managerId: 'usr_manager',
-    managerName: 'Sarah Connor',
-    managerEmail: 'sarah.connor@forge.internal',
+    managerId: null,
+    managerName: null,
+    managerEmail: null,
   };
 }
 
@@ -134,26 +195,24 @@ export function startgoalsServer(portOverride?: number) {
         });
       }
 
-      // 4. Public Auth & Persona Endpoints
+      // 4. Public Auth Endpoints
       if (pathname.endsWith('/api/auth/logout') && req.method === 'POST') {
         const authBase = process.env.AUTH_SERVICE_URL?.trim().replace(/\/+$/, '') || '';
         const redirectUrl = authBase ? `${authBase}/login` : '/auth/login';
         const headers = new Headers();
         headers.set('Content-Type', 'application/json');
         headers.append('Set-Cookie', 'goals_logged_out=true; Path=/; HttpOnly; SameSite=Lax');
-        headers.append('Set-Cookie', 'goals_persona=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax');
         headers.append('Set-Cookie', 'forge_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax');
         return new Response(JSON.stringify({ success: true, message: 'Logged out successfully', redirectUrl }), { status: 200, headers });
       }
 
       if (pathname.endsWith('/api/auth/login') && req.method === 'POST') {
-        const body = await req.json().catch(() => ({}));
-        const persona = body.persona || 'employee';
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        headers.append('Set-Cookie', `goals_persona=${persona}; Path=/; HttpOnly; SameSite=Lax`);
-        headers.append('Set-Cookie', 'goals_logged_out=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax');
-        return new Response(JSON.stringify({ success: true, persona }), { status: 200, headers });
+        const authBase = process.env.AUTH_SERVICE_URL?.trim().replace(/\/+$/, '') || '';
+        const redirectUrl = authBase ? `${authBase}/login` : '/auth/login';
+        return new Response(JSON.stringify({ success: true, redirectUrl }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
       if (pathname.endsWith('/api/auth/users') && req.method === 'GET') {
@@ -164,10 +223,9 @@ export function startgoalsServer(portOverride?: number) {
         });
       }
 
-      // 5. Zero-Trust Auth Guard
+      // 5. Zero-Trust Auth Guard (Identity & Session Signature Validation)
       const auth = await authGuard(req, {
         appName: 'goals',
-        requiredRoles: ['roles/employee', 'roles/admin', 'roles/manager'],
       });
 
       if (!auth.authenticated || !auth.user) {
@@ -180,40 +238,71 @@ export function startgoalsServer(portOverride?: number) {
             headers: { 'Content-Type': 'application/json' },
           });
         }
-        return new Response(renderLoginView(), {
+        return new Response(renderLoginView(req), {
           status: 200,
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
       }
 
-      const user = getEffectiveUser(auth.user, req);
+      // 5.1 Manager & Leadership Clearance via SG Forge Dedicated Hierarchy API
+      const baseRoles = auth.user.roles || [];
+      const hasDirectRole = baseRoles.includes('roles/manager') || baseRoles.includes('roles/admin') || baseRoles.includes('roles/super_admin');
+
+      let isVerifiedManager = hasDirectRole;
+      if (!isVerifiedManager) {
+        // Query SG Forge dedicated endpoint: GET /api/v1/auth/hierarchy/:id/is-manager
+        const managerCheck = await checkEmployeeIsManager(auth.user.id, { incomingReq: req });
+        if (managerCheck && managerCheck.isManager) {
+          isVerifiedManager = true;
+          auth.user.roles = Array.from(new Set([...baseRoles, 'roles/manager']));
+        } else if (isLocalManager(auth.user.id)) {
+          isVerifiedManager = true;
+          auth.user.roles = Array.from(new Set([...baseRoles, 'roles/manager']));
+        }
+      }
+
+      if (!isVerifiedManager) {
+        const isApi = pathname.includes('/api/') || (req.headers.get('accept') || '').includes('application/json');
+        if (isApi) {
+          return new Response(JSON.stringify({
+            type: 'https://tools.ietf.org/html/rfc7807',
+            title: 'Forbidden: Leadership Clearance Required',
+            status: 403,
+            detail: 'Individual Goal Center is restricted to People Managers, Department Leads, and Executive Leadership.',
+            code: 'FORBIDDEN_MANAGER_ONLY',
+          }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/problem+json' },
+          });
+        }
+        return new Response(renderLeadershipRestrictedView(auth.user, req), {
+          status: 403,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        });
+      }
+
+      const user = await getEffectiveUser(auth.user, req);
       const orgId = user.orgId || 'org_default';
 
-      if (pathname.endsWith('/api/persona/toggle') && req.method === 'POST') {
-        if (process.env.NODE_ENV === 'production' && !user.roles.includes('roles/admin') && !user.roles.includes('roles/manager')) {
-          return new Response(JSON.stringify({ error: 'Forbidden: Persona toggling restricted' }), {
-            status: 403,
+      if (pathname.endsWith('/api/auth/me') && req.method === 'GET') {
+        return new Response(JSON.stringify({ ok: true, user }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (pathname.endsWith('/api/org/employees') && req.method === 'GET') {
+        const centralList = await fetchEmployeesList({ incomingReq: req });
+        if (centralList && centralList.items) {
+          return new Response(JSON.stringify(centralList), {
+            status: 200,
             headers: { 'Content-Type': 'application/json' },
           });
         }
-        const cookieHeader = req.headers.get('cookie') || '';
-        let nextVal = 'employee';
-        if (cookieHeader.includes('goals_persona=employee')) {
-          nextVal = 'solo';
-        } else if (cookieHeader.includes('goals_persona=solo')) {
-          nextVal = 'manager';
-        } else if (cookieHeader.includes('goals_persona=manager')) {
-          nextVal = 'employee';
-        } else {
-          nextVal = 'solo';
-        }
-
-        return new Response(JSON.stringify({ persona: nextVal }), {
+        const users = listUsers();
+        return new Response(JSON.stringify({ ok: true, items: users, total: users.length, departments: [] }), {
           status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'Set-Cookie': `goals_persona=${nextVal}; Path=/; HttpOnly; SameSite=Lax`,
-          },
+          headers: { 'Content-Type': 'application/json' },
         });
       }
 
@@ -222,6 +311,28 @@ export function startgoalsServer(portOverride?: number) {
       if (pathname.endsWith('/api/projects') && req.method === 'GET') {
         const projects = listProjects(orgId);
         return new Response(JSON.stringify(projects), { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // POST /api/projects
+      if (pathname.endsWith('/api/projects') && req.method === 'POST') {
+        const body = await req.json().catch(() => ({}));
+        if (!body.name || !body.code) {
+          return new Response(JSON.stringify({ error: 'Project name and code are required' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        const newProj = createProjectRecord({
+          orgId,
+          name: body.name,
+          code: body.code,
+          description: body.description || '',
+          managerId: user.managerId || user.id,
+        });
+        return new Response(JSON.stringify(newProj), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
       if (pathname.includes('/api/boards')) {

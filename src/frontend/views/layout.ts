@@ -23,7 +23,7 @@ export interface LayoutOptions {
 
 export function renderLayout(options: LayoutOptions): string {
   const { activeTab, user, reminders, contentHtml } = options;
-  const isManager = user.roles.includes('roles/manager') || user.id === 'usr_manager';
+  const isManager = user.roles.includes('roles/manager') || user.roles.includes('roles/admin') || user.roles.includes('roles/super_admin');
   const unreadAlerts = reminders.filter(r => !r.isDismissed).length;
 
   return `<!DOCTYPE html>
@@ -224,23 +224,6 @@ export function renderLayout(options: LayoutOptions): string {
       localStorage.setItem('forge_theme', next);
     }
 
-    function togglePersonaSpa() {
-      fetch('api/persona/toggle', { method: 'POST' })
-        .then(res => res.json())
-        .then(data => {
-          const label = document.getElementById('personaLabel');
-          const titleMap = {
-            manager: 'Manager (Sarah)',
-            solo: 'Employee (Morgan - No Mgr)',
-            employee: 'Employee (Jane)'
-          };
-          if (label) label.textContent = titleMap[data.persona] || data.persona;
-          if (window.astryxToast) window.astryxToast('Switched persona to ' + (titleMap[data.persona] || data.persona), 'info');
-          const urlParams = new URLSearchParams(window.location.search);
-          loadSpaView(urlParams.get('tab') || 'dashboard', urlParams.get('id'));
-        });
-    }
-
     function openLogoutModal() {
       const modal = document.getElementById('logoutModal');
       if (modal) modal.classList.add('open');
@@ -256,7 +239,7 @@ export function renderLayout(options: LayoutOptions): string {
         .then(res => res.json())
         .then(data => {
           closeLogoutModal();
-          if (window.astryxToast) window.astryxToast('Session invalidated. Redirecting to SG Forge SSO...', 'info');
+          if (window.astryxToast) window.astryxToast('Session invalidated. Redirecting...', 'info');
           setTimeout(() => {
             window.location.href = data.redirectUrl || '/auth/login';
           }, 400);
@@ -266,28 +249,48 @@ export function renderLayout(options: LayoutOptions): string {
         });
     }
 
-    function openLoginModal() {
-      const modal = document.getElementById('loginModal');
-      if (modal) modal.classList.add('open');
+    function toggleQuickProjectCreation() {
+      const container = document.getElementById('quickProjectContainer');
+      if (container) {
+        container.style.display = container.style.display === 'none' ? 'block' : 'none';
+      }
     }
 
-    function closeLoginModal() {
-      const modal = document.getElementById('loginModal');
-      if (modal) modal.classList.remove('open');
-    }
+    function handleQuickCreateProject() {
+      const nameInput = document.getElementById('quickProjectName');
+      const codeInput = document.getElementById('quickProjectCode');
+      const name = nameInput ? nameInput.value.trim() : '';
+      const code = codeInput ? codeInput.value.trim() : '';
+      if (!name || !code) {
+        if (window.astryxToast) window.astryxToast('Please provide both Project Name and Code', 'error');
+        return;
+      }
 
-    function selectPersona(persona) {
-      fetch('api/auth/login', {
+      fetch('api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ persona })
+        body: JSON.stringify({ name, code })
       })
-      .then(res => res.json())
-      .then(data => {
-        closeLoginModal();
-        if (window.astryxToast) window.astryxToast('Authenticated as ' + persona.toUpperCase(), 'success');
-        const urlParams = new URLSearchParams(window.location.search);
-        loadSpaView(urlParams.get('tab') || 'dashboard', urlParams.get('id'));
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to create project');
+        return res.json();
+      })
+      .then(newProj => {
+        const select = document.getElementById('boardProjectSelect');
+        if (select) {
+          const opt = document.createElement('option');
+          opt.value = newProj.id;
+          opt.textContent = newProj.name + ' (' + newProj.code + ')';
+          opt.selected = true;
+          select.appendChild(opt);
+        }
+        if (nameInput) nameInput.value = '';
+        if (codeInput) codeInput.value = '';
+        toggleQuickProjectCreation();
+        if (window.astryxToast) window.astryxToast('Project ' + newProj.name + ' created!', 'success');
+      })
+      .catch(err => {
+        if (window.astryxToast) window.astryxToast(err.message, 'error');
       });
     }
 
@@ -301,6 +304,8 @@ export function renderLayout(options: LayoutOptions): string {
           .then(projects => {
             if (projects && projects.length > 0) {
               select.innerHTML = projects.map(p => '<option value="' + p.id + '">' + p.name + ' (' + p.code + ')</option>').join('');
+            } else {
+              select.innerHTML = '<option value="" disabled selected>No projects found. Click + New Project above.</option>';
             }
           })
           .catch(() => {});

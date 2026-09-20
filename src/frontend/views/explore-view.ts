@@ -103,7 +103,7 @@ export function renderExploreView(user: AuthUser, boards: GoalBoard[]): string {
                   const safeOwner = escapeHtml(b.ownerName);
                   const safeDept = escapeHtml(b.ownerDepartment);
                   const safeProject = escapeHtml(b.projectName || 'General Project');
-                  const safeManager = escapeHtml(b.managerName || b.approvedBy || 'Sarah Connor');
+                  const safeManager = escapeHtml(b.managerName || b.approvedBy || 'Unassigned');
                   const initials = getInitials(b.ownerName);
                   const avatarGradient = getAvatarGradient(b.ownerName);
 

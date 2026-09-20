@@ -16,14 +16,48 @@ CMD="${1:-up}"
 shift || true
 
 ensure_gateway_network() {
-    local net_name="${FORGE_APPS_NETWORK:-${CONTAINER_PREFIX:-ag}_forge_apps_net}"
+    local net_name="${FORGE_APPS_NETWORK:-forge_apps_net}"
     if ! docker network inspect "$net_name" >/dev/null 2>&1; then
         echo "🌐 Creating standalone gateway network: $net_name..."
         docker network create "$net_name" >/dev/null 2>&1 || true
     fi
 }
 
+run_dev() {
+    ensure_gateway_network
+    local dev_file="$REPO_ROOT/docker/dev/docker-compose.yml"
+    [ ! -f "$dev_file" ] && dev_file="$REPO_ROOT/docker-compose.yml"
+    if [ $# -eq 0 ]; then
+        echo "🐳 [${BRAND_NAME}] Starting ${APP_NAME} in Docker development mode (hot reload)..."
+        set -- up -d --build
+    else
+        echo "🐳 [${BRAND_NAME}] Running Docker dev command: $*"
+    fi
+    exec docker compose -p "${COMPOSE_PROJECT_NAME}-dev" --env-file "$REPO_ROOT/.env" -f "$dev_file" "$@"
+}
+
+run_prod() {
+    ensure_gateway_network
+    local prod_file="$REPO_ROOT/docker/prod/docker-compose.yml"
+    [ ! -f "$prod_file" ] && prod_file="$REPO_ROOT/docker-compose.yml"
+    if [ $# -eq 0 ]; then
+        echo "🚀 [${BRAND_NAME}] Starting ${APP_NAME} in Docker production mode..."
+        set -- up -d --build
+    else
+        echo "🚀 [${BRAND_NAME}] Running Docker prod command: $*"
+    fi
+    exec docker compose -p "${COMPOSE_PROJECT_NAME}-prod" --env-file "$REPO_ROOT/.env" -f "$prod_file" "$@"
+}
+
 case "$CMD" in
+    dev|docker:dev)
+        run_dev "$@"
+        ;;
+
+    prod|docker:prod)
+        run_prod "$@"
+        ;;
+
     up)
         ensure_gateway_network
         echo "🐳 [${BRAND_NAME}] Starting ${APP_NAME} via Docker Compose..."
@@ -60,7 +94,13 @@ case "$CMD" in
 
     compose|docker)
         ensure_gateway_network
-        exec docker compose -p "$COMPOSE_PROJECT_NAME" --env-file "$REPO_ROOT/.env" -f "$REPO_ROOT/docker-compose.yml" "$@"
+        if [ "$1" = "dev" ] || [ "$1" = "prod" ]; then
+            SUB="$1"
+            shift || true
+            exec "$REPO_ROOT/scripts/run/docker.sh" "$SUB" "$@"
+        else
+            exec docker compose -p "$COMPOSE_PROJECT_NAME" --env-file "$REPO_ROOT/.env" -f "$REPO_ROOT/docker-compose.yml" "$@"
+        fi
         ;;
 
     top|ctop)
@@ -89,7 +129,7 @@ case "$CMD" in
 
     *)
         echo "❌ Unknown docker command: $CMD" >&2
-        echo "Usage: ./run.sh docker [up|down|restart|ps|status|logs|build|compose|top|ctop|monitor|purge|reset-data]" >&2
+        echo "Usage: ./run.sh docker [dev|prod|up|down|restart|ps|status|logs|build|compose|top|ctop|monitor|purge|reset-data]" >&2
         exit 1
         ;;
 esac

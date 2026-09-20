@@ -10,7 +10,7 @@ import { startgoalsServer } from '../../src/server';
 describe('Tier 5 E2E: Individual Goal Center Server Bootstrap', () => {
   it('Arrange, Act, Assert: successfully boots server and responds to health and authenticated routes', async () => {
     const server = startgoalsServer(0);
-    const token = createInternalServiceToken(['roles/employee'], 'usr_e2e_template');
+    const token = createInternalServiceToken(['roles/manager'], 'usr_e2e_template');
 
     try {
       // 1. Health check probe

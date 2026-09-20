@@ -1,0 +1,333 @@
+/**
+ * SG Forge Micro-App Submodule - Dev System Test Data Fixtures (2026 LTS)
+ * Modular test fixtures keeping seed-data.ts comfortably <= 500 lines.
+ * @requirements [HLR-SDK-301] [LLR-SUB-001] [HLR-GOALS-001] [LLR-GOALS-002]
+ */
+
+export const devUsers = [
+  {
+    id: 'usr-superadmin',
+    email: 'superadmin@forge.internal',
+    displayName: 'Rajesh Sharma',
+    roles: 'roles/super_admin,roles/admin',
+    department: 'Executive Leadership',
+    managerId: null,
+    managerName: null,
+    managerEmail: null,
+    jobTitle: 'Founder & Chief Technology Officer',
+    employeeCode: 'EMP-001',
+  },
+  {
+    id: 'usr-bob-lead',
+    email: 'bob.lead@forge.internal',
+    displayName: 'Rohan Kulkarni',
+    roles: 'roles/manager,roles/admin',
+    department: 'Platform Engineering',
+    managerId: 'usr-superadmin',
+    managerName: 'Rajesh Sharma',
+    managerEmail: 'superadmin@forge.internal',
+    jobTitle: 'Director of Core Platform Engineering',
+    employeeCode: 'EMP-007',
+  },
+  {
+    id: 'usr-alice-eng',
+    email: 'alice.eng@forge.internal',
+    displayName: 'Aditi Sharma',
+    roles: 'roles/manager,roles/employee',
+    department: 'Platform Engineering',
+    managerId: 'usr-bob-lead',
+    managerName: 'Rohan Kulkarni',
+    managerEmail: 'bob.lead@forge.internal',
+    jobTitle: 'Senior Distributed Systems Engineer',
+    employeeCode: 'EMP-011',
+  },
+  {
+    id: 'usr-tanvi-fe',
+    email: 'tanvi.hegde@forge.internal',
+    displayName: 'Tanvi Hegde',
+    roles: 'roles/manager,roles/employee',
+    department: 'Design & User Experience',
+    managerId: 'usr-bob-lead',
+    managerName: 'Rohan Kulkarni',
+    managerEmail: 'bob.lead@forge.internal',
+    jobTitle: 'Staff UI/UX & Frontend Architect',
+    employeeCode: 'EMP-012',
+  },
+  {
+    id: 'usr-meera-qa',
+    email: 'meera.raghavan@forge.internal',
+    displayName: 'Meera Raghavan',
+    roles: 'roles/employee',
+    department: 'Quality Engineering',
+    managerId: 'usr-bob-lead',
+    managerName: 'Rohan Kulkarni',
+    managerEmail: 'bob.lead@forge.internal',
+    jobTitle: 'Lead Platform QA & Chaos Engineer',
+    employeeCode: 'EMP-013',
+  },
+  {
+    id: 'usr-amit-dev',
+    email: 'amitabh.mukherjee@forge.internal',
+    displayName: 'Amitabh Mukherjee',
+    roles: 'roles/employee',
+    department: 'Platform Engineering',
+    managerId: 'usr-alice-eng',
+    managerName: 'Aditi Sharma',
+    managerEmail: 'alice.eng@forge.internal',
+    jobTitle: 'Backend Platform Systems Engineer',
+    employeeCode: 'EMP-016',
+  },
+  {
+    id: 'usr-neha-int',
+    email: 'neha.chawla@forge.internal',
+    displayName: 'Neha Chawla',
+    roles: 'roles/employee',
+    department: 'Platform Engineering',
+    managerId: 'usr-alice-eng',
+    managerName: 'Aditi Sharma',
+    managerEmail: 'alice.eng@forge.internal',
+    jobTitle: 'Associate Distributed Systems Engineer',
+    employeeCode: 'EMP-017',
+  },
+  {
+    id: 'usr-arjun-design',
+    email: 'arjun.nair@forge.internal',
+    displayName: 'Arjun Nair',
+    roles: 'roles/employee',
+    department: 'Design & User Experience',
+    managerId: 'usr-tanvi-fe',
+    managerName: 'Tanvi Hegde',
+    managerEmail: 'tanvi.hegde@forge.internal',
+    jobTitle: 'Design Systems & Component Engineer',
+    employeeCode: 'EMP-018',
+  },
+];
+
+export function getDevProjects(orgId: string) {
+  return [
+    {
+      id: 'proj-core',
+      orgId,
+      name: 'Core Platform Engineering',
+      code: 'CORE',
+      description: 'Distributed persistence, libSQL replication, and event streaming',
+      managerId: 'usr-bob-lead',
+    },
+    {
+      id: 'proj-infra',
+      orgId,
+      name: 'Cloud & Zero-Trust Infrastructure',
+      code: 'INFRA',
+      description: 'Air-gap container security, mTLS boundaries, and SBOM automation',
+      managerId: 'usr-alice-eng',
+    },
+    {
+      id: 'proj-ui',
+      orgId,
+      name: 'Design System & Micro-Frontends',
+      code: 'UIX',
+      description: 'Luxe dark mode tokens, accessible vector components, and SPA hydration',
+      managerId: 'usr-tanvi-fe',
+    },
+    {
+      id: 'proj-qa',
+      orgId,
+      name: 'Reliability & Chaos Testing',
+      code: 'QAC',
+      description: 'Network partition simulation, fuzzing contracts, and load benchmarks',
+      managerId: 'usr-meera-qa',
+    },
+  ];
+}
+
+export function getDevBoards(orgId: string, now: number) {
+  const oneDay = 24 * 60 * 60 * 1000;
+  return [
+    {
+      id: 'board-aditi-wal',
+      orgId,
+      projectId: 'proj-core',
+      ownerId: 'usr-alice-eng',
+      ownerName: 'Aditi Sharma',
+      ownerEmail: 'alice.eng@forge.internal',
+      ownerDepartment: 'Platform Engineering',
+      title: 'Distributed Cache Synchronization & WAL Replication',
+      cycle: '2026-Q3',
+      status: 'SUBMITTED',
+      lockVersion: 2,
+      revisionNumber: 1,
+      submissionDeadline: '2026-09-28',
+      submittedAt: now - 2 * oneDay,
+      approvedAt: null,
+      approvedBy: null,
+      unlockedAt: null,
+    },
+    {
+      id: 'board-aditi-mesh',
+      orgId,
+      projectId: 'proj-infra',
+      ownerId: 'usr-alice-eng',
+      ownerName: 'Aditi Sharma',
+      ownerEmail: 'alice.eng@forge.internal',
+      ownerDepartment: 'Platform Engineering',
+      title: 'Zero-Trust Service-to-Service Protocol Migration',
+      cycle: '2026-Q2',
+      status: 'APPROVED',
+      lockVersion: 3,
+      revisionNumber: 1,
+      submissionDeadline: '2026-06-30',
+      submittedAt: now - 30 * oneDay,
+      approvedAt: now - 28 * oneDay,
+      approvedBy: 'Rohan Kulkarni (Director of Core Platform Engineering)',
+      unlockedAt: null,
+    },
+    {
+      id: 'board-tanvi-design',
+      orgId,
+      projectId: 'proj-ui',
+      ownerId: 'usr-tanvi-fe',
+      ownerName: 'Tanvi Hegde',
+      ownerEmail: 'tanvi.hegde@forge.internal',
+      ownerDepartment: 'Design & User Experience',
+      title: 'Design System Token Engine & Accessible Micro-Frontends',
+      cycle: '2026-Q3',
+      status: 'REWORK_REQUESTED',
+      lockVersion: 2,
+      revisionNumber: 2,
+      submissionDeadline: '2026-09-25',
+      submittedAt: now - 4 * oneDay,
+      approvedAt: null,
+      approvedBy: null,
+      unlockedAt: null,
+    },
+    {
+      id: 'board-meera-chaos',
+      orgId,
+      projectId: 'proj-qa',
+      ownerId: 'usr-meera-qa',
+      ownerName: 'Meera Raghavan',
+      ownerEmail: 'meera.raghavan@forge.internal',
+      ownerDepartment: 'Quality Engineering',
+      title: 'Automated Chaos Injection & End-to-End Test Harness',
+      cycle: '2026-Q3',
+      status: 'SUBMITTED',
+      lockVersion: 2,
+      revisionNumber: 1,
+      submissionDeadline: '2026-09-30',
+      submittedAt: now - 1 * oneDay,
+      approvedAt: null,
+      approvedBy: null,
+      unlockedAt: null,
+    },
+    {
+      id: 'board-amit-webhooks',
+      orgId,
+      projectId: 'proj-core',
+      ownerId: 'usr-amit-dev',
+      ownerName: 'Amitabh Mukherjee',
+      ownerEmail: 'amitabh.mukherjee@forge.internal',
+      ownerDepartment: 'Platform Engineering',
+      title: 'High-Throughput Webhook Ingestion Engine',
+      cycle: '2026-Q3',
+      status: 'SUBMITTED',
+      lockVersion: 2,
+      revisionNumber: 1,
+      submissionDeadline: '2026-10-05',
+      submittedAt: now - 3 * oneDay,
+      approvedAt: null,
+      approvedBy: null,
+      unlockedAt: null,
+    },
+    {
+      id: 'board-neha-ratelimit',
+      orgId,
+      projectId: 'proj-core',
+      ownerId: 'usr-neha-int',
+      ownerName: 'Neha Chawla',
+      ownerEmail: 'neha.chawla@forge.internal',
+      ownerDepartment: 'Platform Engineering',
+      title: 'API Rate Limiter & Telemetry Exporter',
+      cycle: '2026-Q3',
+      status: 'DRAFT',
+      lockVersion: 1,
+      revisionNumber: 1,
+      submissionDeadline: null,
+      submittedAt: null,
+      approvedAt: null,
+      approvedBy: null,
+      unlockedAt: null,
+    },
+    {
+      id: 'board-arjun-luxe',
+      orgId,
+      projectId: 'proj-ui',
+      ownerId: 'usr-arjun-design',
+      ownerName: 'Arjun Nair',
+      ownerEmail: 'arjun.nair@forge.internal',
+      ownerDepartment: 'Design & User Experience',
+      title: 'Luxe Dark Mode & Vector Glassmorphism Asset Suite',
+      cycle: '2026-Q2',
+      status: 'APPROVED',
+      lockVersion: 3,
+      revisionNumber: 1,
+      submissionDeadline: '2026-06-20',
+      submittedAt: now - 45 * oneDay,
+      approvedAt: now - 42 * oneDay,
+      approvedBy: 'Tanvi Hegde (Staff UI/UX & Frontend Architect)',
+      unlockedAt: null,
+    },
+  ];
+}
+
+export const devItems = [
+  // Board 1: Aditi WAL
+  { id: 'item-aditi-1', boardId: 'board-aditi-wal', title: 'Invalidation protocol for multi-region libSQL', description: 'Design distributed cache consistency and cache invalidation over IPC socket', category: 'DELIVERABLE', targetDate: '2026-09-15', weight: 35, progressPercent: 70, status: 'IN_PROGRESS', sortOrder: 1 },
+  { id: 'item-aditi-2', boardId: 'board-aditi-wal', title: 'WAL streaming replication pipeline', description: 'Implement real-time WAL subscriber service with zero-copy stream processing', category: 'DELIVERABLE', targetDate: '2026-09-22', weight: 40, progressPercent: 50, status: 'IN_PROGRESS', sortOrder: 2 },
+  { id: 'item-aditi-3', boardId: 'board-aditi-wal', title: 'Latency & throughput benchmark suite', description: 'Validate sub-millisecond p99 replication latency under simulated peak load', category: 'METRIC', targetDate: '2026-09-28', weight: 25, progressPercent: 0, status: 'PENDING', sortOrder: 3 },
+
+  // Board 2: Aditi Mesh
+  { id: 'item-aditi-mesh-1', boardId: 'board-aditi-mesh', title: 'Ed25519 asymmetric token validation', description: 'Establish cryptographic identity checking across internal service meshes', category: 'DELIVERABLE', targetDate: '2026-06-15', weight: 50, progressPercent: 100, status: 'COMPLETED', sortOrder: 1 },
+  { id: 'item-aditi-mesh-2', boardId: 'board-aditi-mesh', title: 'Mutual TLS & strict air-gap egress gate', description: 'Enforce deterministic outbound network proxy routing and port lockdown', category: 'DELIVERABLE', targetDate: '2026-06-28', weight: 50, progressPercent: 100, status: 'COMPLETED', sortOrder: 2 },
+
+  // Board 3: Tanvi Design
+  { id: 'item-tanvi-1', boardId: 'board-tanvi-design', title: 'HSL design token consolidation', description: 'Migrate legacy CSS variables to unified semantic HSL color scales', category: 'DELIVERABLE', targetDate: '2026-09-10', weight: 30, progressPercent: 80, status: 'IN_PROGRESS', sortOrder: 1 },
+  { id: 'item-tanvi-2', boardId: 'board-tanvi-design', title: 'High-contrast theme compliance & WCAG AAA', description: 'Verify 7:1 contrast ratio across glassmorphic cards and dynamic HUD badges', category: 'METRIC', targetDate: '2026-09-20', weight: 40, progressPercent: 30, status: 'PENDING', sortOrder: 2 },
+  { id: 'item-tanvi-3', boardId: 'board-tanvi-design', title: 'Zero-dependency vector SVG icon primitives', description: 'Standardize crisp 24x24 scalable vector icons without runtime dependencies', category: 'LEARNING', targetDate: '2026-09-24', weight: 30, progressPercent: 90, status: 'IN_PROGRESS', sortOrder: 3 },
+
+  // Board 4: Meera Chaos
+  { id: 'item-meera-1', boardId: 'board-meera-chaos', title: 'Network partition simulator for libSQL replicas', description: 'Inject simulated latency spikes and packet loss into local test containers', category: 'DELIVERABLE', targetDate: '2026-09-20', weight: 40, progressPercent: 60, status: 'IN_PROGRESS', sortOrder: 1 },
+  { id: 'item-meera-2', boardId: 'board-meera-chaos', title: '5-Tier automated regression pipeline', description: 'Integrate unit, integration, contract, security, and e2e testing suites', category: 'DELIVERABLE', targetDate: '2026-09-26', weight: 35, progressPercent: 80, status: 'IN_PROGRESS', sortOrder: 2 },
+  { id: 'item-meera-3', boardId: 'board-meera-chaos', title: 'Memory leak & thread exhaustion watchdog', description: 'Profile heap allocation growth across long-running background tasks', category: 'METRIC', targetDate: '2026-09-30', weight: 25, progressPercent: 40, status: 'IN_PROGRESS', sortOrder: 3 },
+
+  // Board 5: Amitabh Webhooks
+  { id: 'item-amit-1', boardId: 'board-amit-webhooks', title: 'Asynchronous queue consumer worker pool', description: 'Scale consumer workers dynamically based on queue depth metrics', category: 'DELIVERABLE', targetDate: '2026-09-25', weight: 50, progressPercent: 65, status: 'IN_PROGRESS', sortOrder: 1 },
+  { id: 'item-amit-2', boardId: 'board-amit-webhooks', title: 'Dead-letter queue with exponential backoff retry', description: 'Ensure guaranteed at-least-once delivery for transient network failures', category: 'DELIVERABLE', targetDate: '2026-10-02', weight: 50, progressPercent: 40, status: 'IN_PROGRESS', sortOrder: 2 },
+
+  // Board 6: Neha Rate Limiter
+  { id: 'item-neha-1', boardId: 'board-neha-ratelimit', title: 'Token bucket algorithm implementation', description: 'In-memory sliding window rate limiter for public gateway endpoints', category: 'DELIVERABLE', targetDate: '2026-10-10', weight: 50, progressPercent: 25, status: 'PENDING', sortOrder: 1 },
+  { id: 'item-neha-2', boardId: 'board-neha-ratelimit', title: 'Prometheus metrics scraping endpoint', description: 'Expose rate limit rejection counters and client IP distribution', category: 'METRIC', targetDate: '2026-10-15', weight: 50, progressPercent: 0, status: 'PENDING', sortOrder: 2 },
+
+  // Board 7: Arjun Luxe
+  { id: 'item-arjun-1', boardId: 'board-arjun-luxe', title: 'Glassmorphism CSS variables & backdrop filters', description: 'Curate polished dark mode glass cards with dynamic reflection highlights', category: 'DELIVERABLE', targetDate: '2026-06-10', weight: 50, progressPercent: 100, status: 'COMPLETED', sortOrder: 1 },
+  { id: 'item-arjun-2', boardId: 'board-arjun-luxe', title: 'Zero-emoji SVG icon registry', description: 'Replace all unicode emoji characters with 100% vector SVG icons', category: 'DELIVERABLE', targetDate: '2026-06-18', weight: 50, progressPercent: 100, status: 'COMPLETED', sortOrder: 2 },
+];
+
+export function getDevComments(now: number) {
+  const oneDay = 24 * 60 * 60 * 1000;
+  return [
+    { id: 'comm-aditi-1', boardId: 'board-aditi-wal', itemId: null, authorId: 'usr-alice-eng', authorName: 'Aditi Sharma', authorRole: 'Senior Distributed Systems Engineer', commentText: 'Submitted flight plan for Q3 commitment. Benchmarks and replication benchmarks are ready.', type: 'FEEDBACK', createdAt: now - 2 * oneDay },
+    { id: 'comm-aditi-2', boardId: 'board-aditi-wal', itemId: 'item-aditi-2', authorId: 'usr-bob-lead', authorName: 'Rohan Kulkarni', authorRole: 'Director of Core Platform Engineering', commentText: 'Ensure the subscriber reconnect backoff handles network partitions gracefully.', type: 'FEEDBACK', createdAt: now - 1 * oneDay },
+    { id: 'comm-mesh-1', boardId: 'board-aditi-mesh', itemId: null, authorId: 'usr-alice-eng', authorName: 'Aditi Sharma', authorRole: 'Senior Distributed Systems Engineer', commentText: 'All zero-trust milestones completed and verified against security test suites.', type: 'FEEDBACK', createdAt: now - 29 * oneDay },
+    { id: 'comm-mesh-2', boardId: 'board-aditi-mesh', itemId: null, authorId: 'usr-bob-lead', authorName: 'Rohan Kulkarni', authorRole: 'Director of Core Platform Engineering', commentText: 'Signed off. Exceptional execution on zero-trust cryptographic perimeter.', type: 'APPROVAL', createdAt: now - 28 * oneDay },
+    { id: 'comm-tanvi-1', boardId: 'board-tanvi-design', itemId: null, authorId: 'usr-tanvi-fe', authorName: 'Tanvi Hegde', authorRole: 'Staff UI/UX & Frontend Architect', commentText: 'Drafted Q3 design tokens and micro-frontend component primitives.', type: 'FEEDBACK', createdAt: now - 5 * oneDay },
+    { id: 'comm-tanvi-2', boardId: 'board-tanvi-design', itemId: 'item-tanvi-2', authorId: 'usr-bob-lead', authorName: 'Rohan Kulkarni', authorRole: 'Director of Core Platform Engineering', commentText: 'Please adjust WCAG AAA contrast ratio tokens in the dark theme palette before final signoff.', type: 'REWORK', createdAt: now - 4 * oneDay },
+  ];
+}
+
+export function getDevReminders(orgId: string, now: number) {
+  return [
+    { id: 'rem-rohan-aditi', orgId, userId: 'usr-bob-lead', boardId: 'board-aditi-wal', type: 'REVIEW_REQUESTED', message: 'Aditi Sharma submitted "Distributed Cache Synchronization & WAL Replication" for Q3 review.', dueDate: '2026-09-28' },
+    { id: 'rem-rohan-meera', orgId, userId: 'usr-bob-lead', boardId: 'board-meera-chaos', type: 'REVIEW_REQUESTED', message: 'Meera Raghavan submitted "Automated Chaos Injection & End-to-End Test Harness" for Q3 review.', dueDate: '2026-09-30' },
+    { id: 'rem-tanvi-rework', orgId, userId: 'usr-tanvi-fe', boardId: 'board-tanvi-design', type: 'REWORK_REQUIRED', message: 'Rohan Kulkarni requested revision on item #2 for "Design System Token Engine".', dueDate: '2026-09-25' },
+  ];
+}

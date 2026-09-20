@@ -75,7 +75,7 @@ case "$CMD" in
 
     test)
         echo "🧪 Running 5-tier microservice tests..."
-        exec "$PORTABLE_BUN" test "$@"
+        exec env NODE_ENV=test BUN_ENV=test "$PORTABLE_BUN" test "$@"
         ;;
 
     reset-db)
@@ -93,6 +93,11 @@ case "$CMD" in
             db.close();
         "
         echo "✅ Development database reset to pristine state."
+        ;;
+
+    seed)
+        echo "🌱 [${BRAND_NAME}] Seeding realistic test data for dev system employees..."
+        exec "$PORTABLE_BUN" run "$REPO_ROOT/scripts/ops/seed-data.ts" "$@"
         ;;
 
     doctor)

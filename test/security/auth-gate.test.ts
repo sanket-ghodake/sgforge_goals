@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
-import { createInternalServiceToken } from '../../src/lib/sdk';
+import { createInternalServiceToken, createEd25519ServiceToken } from '../../src/lib/sdk';
 import { startgoalsServer } from '../../src/server';
 
 describe('Tier 3 Security: Individual Goal Center Zero-Trust Auth Gate', () => {
@@ -26,9 +26,9 @@ describe('Tier 3 Security: Individual Goal Center Zero-Trust Auth Gate', () => {
     }
   });
 
-  it('Arrange, Act, Assert: allows authorized employees with signed session token', async () => {
+  it('Arrange, Act, Assert: allows authorized managers with signed session token', async () => {
     const server = startgoalsServer(0);
-    const token = createInternalServiceToken(['roles/employee'], 'usr_template_tester');
+    const token = createInternalServiceToken(['roles/manager'], 'usr_template_tester');
 
     try {
       const res = await fetch(`http://localhost:${server.port}/`, {
@@ -42,15 +42,34 @@ describe('Tier 3 Security: Individual Goal Center Zero-Trust Auth Gate', () => {
     }
   });
 
-  it('Arrange, Act, Assert: returns 403 when user lacks required role', async () => {
+  it('Arrange, Act, Assert: returns 403 Leadership Clearance screen when individual contributor lacks manager role', async () => {
     const server = startgoalsServer(0);
-    const token = createInternalServiceToken(['roles/external_guest'], 'usr_unauthorized');
+    const token = createInternalServiceToken(['roles/employee'], 'usr_ic_employee');
 
     try {
       const res = await fetch(`http://localhost:${server.port}/`, {
-        headers: { Cookie: `forge_session=${token}` },
+        headers: { Cookie: `forge_session=${token}`, Accept: 'text/html' },
       });
       expect(res.status).toBe(403);
+      const html = await res.text();
+      expect(html).toContain('Leadership Clearance Required');
+      expect(html).toContain('Manager Access Only');
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  it('Arrange, Act, Assert: returns 403 RFC 7807 JSON when unprivileged user calls API', async () => {
+    const server = startgoalsServer(0);
+    const token = createInternalServiceToken(['roles/employee'], 'usr_ic_employee');
+
+    try {
+      const res = await fetch(`http://localhost:${server.port}/api/boards`, {
+        headers: { Cookie: `forge_session=${token}`, Accept: 'application/json' },
+      });
+      expect(res.status).toBe(403);
+      const json = await res.json();
+      expect(json.code).toBe('FORBIDDEN_MANAGER_ONLY');
     } finally {
       server.stop(true);
     }
@@ -93,11 +112,11 @@ describe('Tier 3 Security: Individual Goal Center Zero-Trust Auth Gate', () => {
     const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
     const payload = Buffer.from(
       JSON.stringify({
-        sub: 'usr_custom_emp',
-        email: 'custom.emp@forge.internal',
-        display_name: 'Custom Employee Name',
+        sub: 'usr_custom_mgr',
+        email: 'custom.mgr@forge.internal',
+        display_name: 'Custom Manager Name',
         department: 'Cloud Infrastructure',
-        roles: ['roles/employee'],
+        roles: ['roles/manager'],
         exp: Math.floor(Date.now() / 1000) + 3600,
       })
     ).toString('base64url');
@@ -110,7 +129,7 @@ describe('Tier 3 Security: Individual Goal Center Zero-Trust Auth Gate', () => {
       });
       expect(res.status).toBe(200);
       const html = await res.text();
-      expect(html).toContain('Custom Employee Name');
+      expect(html).toContain('Custom Manager Name');
     } finally {
       server.stop(true);
     }
@@ -125,7 +144,7 @@ describe('Tier 3 Security: Individual Goal Center Zero-Trust Auth Gate', () => {
         sub: 'usr_expired',
         email: 'expired@forge.internal',
         display_name: 'Expired User',
-        roles: ['roles/employee'],
+        roles: ['roles/manager'],
         exp: Math.floor(Date.now() / 1000) - 600, // Expired 10 minutes ago
       })
     ).toString('base64url');
@@ -141,6 +160,43 @@ describe('Tier 3 Security: Individual Goal Center Zero-Trust Auth Gate', () => {
       expect(data.authenticated).toBe(false);
       expect(data.code).toBe('TOKEN_EXPIRED');
     } finally {
+      server.stop(true);
+    }
+  });
+
+  it('Arrange, Act, Assert: authenticates employee with asymmetric Ed25519 token matching Central Auth', async () => {
+    const server = startgoalsServer(0);
+    const edToken = createEd25519ServiceToken(['roles/manager'], 'usr_ed25519_mgr');
+
+    try {
+      const res = await fetch(`http://localhost:${server.port}/api/auth/me`, {
+        headers: { Cookie: `forge_session=${edToken}` },
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.ok).toBe(true);
+      expect(data.user.id).toBe('usr_ed25519_mgr');
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  it('Arrange, Act, Assert: renders session logged out screen with login button and redirect when unauthenticated in browser mode', async () => {
+    delete process.env.STRICT_AUTH;
+    const server = startgoalsServer(0);
+
+    try {
+      const res = await fetch(`http://localhost:${server.port}/`, {
+        headers: { Accept: 'text/html' },
+      });
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain('Session Expired');
+      expect(html).toContain('Log In Again');
+      expect(html).toContain('/auth/login');
+      expect(html).toContain('Redirecting to Central Authentication');
+    } finally {
+      process.env.STRICT_AUTH = 'true';
       server.stop(true);
     }
   });

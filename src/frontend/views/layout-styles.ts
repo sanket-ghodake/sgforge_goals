@@ -429,5 +429,63 @@ export function getLayoutStyles(): string {
       color: var(--forge-text-subtle);
       padding-right: 4px;
     }
+
+    /* 2026 LTS Executive Profile Spotlight Hero & HUD Alignment Pods */
+    .profile-hero-card {
+      position: relative; background: var(--forge-bg-card); border: 1px solid var(--forge-border);
+      border-radius: 20px; padding: 22px 26px; margin-bottom: 28px; display: flex;
+      justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      overflow: hidden; transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .profile-hero-card::before {
+      content: ""; position: absolute; top: -50px; left: -50px; width: 220px; height: 220px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.14) 0%, transparent 70%); pointer-events: none;
+    }
+    .profile-hero-card:hover {
+      border-color: rgba(99, 102, 241, 0.35);
+      box-shadow: 0 12px 36px -6px rgba(79, 70, 229, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+    .profile-hero-left { display: flex; align-items: center; gap: 18px; min-width: 0; }
+    .profile-avatar-wrap { position: relative; flex-shrink: 0; }
+    .profile-avatar {
+      width: 58px; height: 58px; border-radius: 16px;
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #9333ea 100%);
+      display: flex; align-items: center; justify-content: center; color: #ffffff;
+      font-weight: 800; font-size: 1.45rem; letter-spacing: -0.02em;
+      box-shadow: 0 8px 24px -4px rgba(79, 70, 229, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+    }
+    .profile-avatar-badge {
+      position: absolute; bottom: -2px; right: -2px; width: 14px; height: 14px; border-radius: 50%;
+      background: #10b981; border: 2.5px solid var(--forge-bg-card); box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.4);
+    }
+    .profile-hero-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+    .profile-user-name { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.025em; color: var(--forge-text-main); line-height: 1.2; }
+    .profile-emp-code {
+      font-family: var(--font-mono); font-size: 0.72rem; font-weight: 600; padding: 2px 8px;
+      border-radius: 6px; background: rgba(124, 58, 237, 0.08); border: 1px solid rgba(124, 58, 237, 0.22);
+      color: var(--forge-accent); letter-spacing: 0.04em;
+    }
+    .profile-role-badge {
+      font-size: 0.75rem; font-weight: 600; padding: 2px 10px; border-radius: 9999px;
+      background: rgba(79, 70, 229, 0.12); border: 1px solid rgba(79, 70, 229, 0.28);
+      color: var(--forge-primary); display: inline-flex; align-items: center; gap: 5px;
+    }
+    .profile-meta-row { display: flex; align-items: center; gap: 14px; font-size: 0.8125rem; color: var(--forge-text-muted); flex-wrap: wrap; }
+    .profile-meta-item { display: inline-flex; align-items: center; gap: 5px; }
+    .profile-pods-group { display: flex; align-items: stretch; gap: 14px; flex-wrap: wrap; }
+    .profile-hud-pod {
+      background: var(--forge-bg-surface); border: 1px solid var(--forge-border);
+      border-radius: 14px; padding: 12px 18px; display: flex; align-items: center;
+      gap: 14px; min-width: 210px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .profile-hud-pod:hover { border-color: var(--forge-border-medium); transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08); }
+    .profile-pod-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .profile-pod-icon.indigo { background: rgba(79, 70, 229, 0.12); color: var(--forge-primary); border: 1px solid rgba(79, 70, 229, 0.2); }
+    .profile-pod-icon.violet { background: rgba(124, 58, 237, 0.12); color: var(--forge-accent); border: 1px solid rgba(124, 58, 237, 0.2); }
+    .profile-pod-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--forge-text-muted); margin-bottom: 2px; }
+    .profile-pod-val { font-size: 0.875rem; font-weight: 700; color: var(--forge-text-main); white-space: nowrap; }
   `;
 }
