@@ -200,4 +200,20 @@ describe('Tier 3 Security: Individual Goal Center Zero-Trust Auth Gate', () => {
       server.stop(true);
     }
   });
+
+  it('Arrange, Act, Assert: rejects renewal attempts with malformed or truncated refresh tokens', async () => {
+    const server = startgoalsServer(0);
+
+    try {
+      const res = await fetch(`http://localhost:${server.port}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { Cookie: 'forge_refresh_token=bad' }, // less than 8 chars
+      });
+      expect(res.status).toBe(401);
+      const data = await res.json();
+      expect(data.code).toBe('REFRESH_TOKEN_INVALID');
+    } finally {
+      server.stop(true);
+    }
+  });
 });

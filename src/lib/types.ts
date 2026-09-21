@@ -99,7 +99,17 @@ export interface Project {
 
 export type GoalBoardStatus = 'DRAFT' | 'SUBMITTED' | 'REWORK_REQUESTED' | 'APPROVED' | 'LOCKED_OVERDUE' | 'UNLOCK_REQUESTED' | 'COMPLETED' | 'ARCHIVED';
 
-export type GoalCategory = 'DELIVERABLE' | 'METRIC' | 'LEARNING';
+export type PriorityLevel = 'CRITICAL' | 'MEDIUM' | 'LOW';
+
+export type GoalCategory = 
+  | 'CORE_SKILL'
+  | 'STRATEGIC_SKILL'
+  | 'SKILL_GAP'
+  | 'STRATEGIC_PLAN'
+  | 'TACTICAL_PLAN'
+  | 'DELIVERABLE'
+  | 'METRIC'
+  | 'LEARNING';
 
 export type GoalItemStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
 
@@ -114,6 +124,9 @@ export interface GoalItem {
   progressPercent: number;
   status: GoalItemStatus;
   sortOrder: number;
+  priority?: PriorityLevel;
+  targetQtr?: string | null;
+  plansCount?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -121,8 +134,6 @@ export interface GoalItem {
 export interface GoalBoard {
   id: string;
   orgId: string;
-  projectId: string;
-  projectName?: string;
   ownerId: string;
   ownerName: string;
   ownerEmail: string;
@@ -130,7 +141,6 @@ export interface GoalBoard {
   managerId?: string | null;
   managerName?: string | null;
   title: string;
-  cycle: string;
   status: GoalBoardStatus;
   lockVersion: number;
   revisionNumber: number;
@@ -139,6 +149,7 @@ export interface GoalBoard {
   approvedAt?: number | null;
   approvedBy?: string | null;
   unlockedAt?: number | null;
+  notes?: string | null;
   createdAt: number;
   updatedAt: number;
   items?: GoalItem[];
@@ -174,10 +185,9 @@ export interface Reminder {
 }
 
 export interface CreateBoardInput {
-  projectId: string;
   title: string;
-  cycle: string;
   submissionDeadline?: string;
+  notes?: string;
 }
 
 export interface UpdateGoalItemsInput {
@@ -190,6 +200,9 @@ export interface UpdateGoalItemsInput {
     weight: number;
     progressPercent: number;
     status: GoalItemStatus;
+    priority?: PriorityLevel;
+    targetQtr?: string | null;
+    plansCount?: number;
   }>;
 }
 
@@ -217,14 +230,11 @@ export interface ProjectRow {
 export interface GoalBoardRow {
   id: string;
   org_id: string;
-  project_id: string;
-  project_name?: string;
   owner_id: string;
   owner_name: string;
   owner_email: string;
   owner_department: string;
   title: string;
-  cycle: string;
   status: GoalBoardStatus;
   lock_version: number;
   revision_number: number;
@@ -233,6 +243,7 @@ export interface GoalBoardRow {
   approved_at?: number | null;
   approved_by?: string | null;
   unlocked_at?: number | null;
+  notes?: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -248,6 +259,9 @@ export interface GoalItemRow {
   progress_percent: number;
   status: GoalItemStatus;
   sort_order: number;
+  priority?: PriorityLevel;
+  target_qtr?: string | null;
+  plans_count?: number;
   created_at: number;
   updated_at: number;
 }

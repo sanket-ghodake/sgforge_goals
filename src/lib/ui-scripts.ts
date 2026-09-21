@@ -43,8 +43,9 @@ export function getHeadStateScript(options: { defaultTheme?: 'dark' | 'light' } 
             if (typeof BroadcastChannel !== 'undefined') {
               var authBc = new BroadcastChannel('forge_auth_channel');
               authBc.onmessage = function(ev) {
-                if (ev && ev.data && ev.data.type === 'LOGOUT') {
-                  onCrossTabLogout('channel_logout');
+                if (ev && ev.data) {
+                  if (ev.data.type === 'LOGOUT') onCrossTabLogout('channel_logout');
+                  if (ev.data.type === 'SESSION_REFRESHED') lastActivityTime = Date.now();
                 }
               };
             }
@@ -56,39 +57,106 @@ export function getHeadStateScript(options: { defaultTheme?: 'dark' | 'light' } 
               }
             });
 
-            // C. Proactive Fetch 401 Interceptor
-            if (typeof window.fetch === 'function') {
-              var origFetch = window.fetch;
-              window.fetch = function() {
-                return origFetch.apply(this, arguments).then(function(res) {
-                  if (res && res.status === 401 && !window.location.pathname.startsWith('/auth/login')) {
+            var triggerLogout = function(reason) {
+              try {
+                localStorage.setItem('forge_logout_event', String(Date.now()));
+                if (typeof BroadcastChannel !== 'undefined') {
+                  var bc = new BroadcastChannel('forge_auth_channel');
+                  bc.postMessage({ type: 'LOGOUT', timestamp: Date.now(), reason: reason });
+                  bc.close();
+                }
+              } catch(e) {}
+              onCrossTabLogout(reason);
+            };
+
+            var lastActivityTime = Date.now();
+            var onActivity = function() { lastActivityTime = Date.now(); };
+            window.addEventListener('pointerdown', onActivity, { passive: true });
+            window.addEventListener('keydown', onActivity, { passive: true });
+            window.addEventListener('scroll', onActivity, { passive: true });
+
+            // Single-flight Mutex lock for silent token auto-renewal
+            var refreshPromise = null;
+            var attemptSilentRefresh = function() {
+              if (refreshPromise) return refreshPromise;
+              var tryFetch = function(u) {
+                return origFetch(u, {
+                  method: 'POST',
+                  headers: { 'Accept': 'application/json' },
+                  credentials: 'include'
+                });
+              };
+              refreshPromise = tryFetch('/api/v1/auth/refresh')
+                .then(function(res) {
+                  if (!res.ok && (res.status === 404 || res.status === 405)) {
+                    return tryFetch('/api/auth/refresh');
+                  }
+                  return res;
+                })
+                .then(function(res) {
+                  if (!res.ok && (res.status === 404 || res.status === 405)) {
+                    return tryFetch('/auth/api/v1/auth/refresh');
+                  }
+                  return res;
+                })
+                .then(function(res) {
+                  refreshPromise = null;
+                  if (res && res.ok) {
                     try {
-                      localStorage.setItem('forge_logout_event', String(Date.now()));
                       if (typeof BroadcastChannel !== 'undefined') {
                         var bc = new BroadcastChannel('forge_auth_channel');
-                        bc.postMessage({ type: 'LOGOUT', timestamp: Date.now() });
+                        bc.postMessage({ type: 'SESSION_REFRESHED', timestamp: Date.now() });
                         bc.close();
                       }
                     } catch(e) {}
-                    onCrossTabLogout('401_fetch');
+                    return true;
+                  }
+                  return false;
+                }).catch(function() {
+                  refreshPromise = null;
+                  return false;
+                });
+              return refreshPromise;
+            };
+
+            // C. Proactive Fetch 401 Interceptor with Silent Auto-Renewal
+            if (typeof window.fetch === 'function') {
+              var origFetch = window.fetch;
+              window.fetch = function() {
+                var self = this;
+                var args = Array.prototype.slice.call(arguments);
+                var reqUrl = (typeof args[0] === 'string') ? args[0] : (args[0] && args[0].url ? args[0].url : '');
+
+                return origFetch.apply(self, args).then(function(res) {
+                  if (res && res.status === 401 && !window.location.pathname.startsWith('/auth/login')) {
+                    var isAuthRoute = reqUrl.indexOf('/auth/refresh') !== -1 ||
+                                      reqUrl.indexOf('/auth/login') !== -1 ||
+                                      reqUrl.indexOf('/auth/logout') !== -1;
+
+                    if (isAuthRoute) {
+                      triggerLogout('auth_endpoint_failed');
+                      return res;
+                    }
+
+                    return attemptSilentRefresh().then(function(refreshed) {
+                      if (refreshed) {
+                        return origFetch.apply(self, args);
+                      }
+                      triggerLogout('token_refresh_rejected');
+                      return res;
+                    });
                   }
                   return res;
                 });
               };
             }
 
-            // D. Background Active Session Heartbeat (Every 30s)
+            // D. Background Active Session Heartbeat (Renew every 10m if user is active)
             setInterval(function() {
-              if (document.visibilityState === 'visible') {
-                origFetch('/api/auth/me', { headers: { 'Accept': 'application/json' } })
-                  .then(function(res) {
-                    if (res && res.status === 401) {
-                      onCrossTabLogout('session_heartbeat_expired');
-                    }
-                  })
-                  .catch(function() {});
+              if (Date.now() - lastActivityTime < 900000 && !document.hidden) {
+                attemptSilentRefresh();
               }
-            }, 30000);
+            }, 600000);
           }
         } catch(e) {}
       })();

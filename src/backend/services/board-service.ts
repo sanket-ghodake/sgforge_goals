@@ -55,11 +55,10 @@ export function listProjects(orgId: string): Project[] {
   }));
 }
 
-export function listBoards(orgId: string, filter?: { ownerId?: string; projectId?: string; cycle?: string }): GoalBoard[] {
+export function listBoards(orgId: string, filter?: { ownerId?: string }): GoalBoard[] {
   let query = `
-    SELECT b.*, p.name as project_name, u.manager_name as manager_name, u.manager_id as manager_id
+    SELECT b.*, u.manager_name as manager_name, u.manager_id as manager_id
     FROM goal_boards b 
-    LEFT JOIN projects p ON b.project_id = p.id 
     LEFT JOIN users u ON b.owner_id = u.id
     WHERE b.org_id = ?
   `;
@@ -68,14 +67,6 @@ export function listBoards(orgId: string, filter?: { ownerId?: string; projectId
   if (filter?.ownerId) {
     query += ' AND b.owner_id = ?';
     params.push(filter.ownerId);
-  }
-  if (filter?.projectId) {
-    query += ' AND b.project_id = ?';
-    params.push(filter.projectId);
-  }
-  if (filter?.cycle) {
-    query += ' AND b.cycle = ?';
-    params.push(filter.cycle);
   }
 
   query += ' ORDER BY b.updated_at DESC';
@@ -94,7 +85,8 @@ export function listBoards(orgId: string, filter?: { ownerId?: string; projectId
       (itemsByBoardId[i.board_id] ??= []).push({
         id: i.id, boardId: i.board_id, title: i.title, description: i.description, category: i.category,
         targetDate: i.target_date, weight: i.weight, progressPercent: i.progress_percent, status: i.status,
-        sortOrder: i.sort_order, createdAt: i.created_at, updatedAt: i.updated_at,
+        sortOrder: i.sort_order, priority: (i.priority as any) || 'MEDIUM', targetQtr: i.target_qtr || null,
+        plansCount: Number(i.plans_count) || 0, createdAt: i.created_at, updatedAt: i.updated_at,
       });
     });
   }
@@ -102,8 +94,6 @@ export function listBoards(orgId: string, filter?: { ownerId?: string; projectId
   return rows.map(r => ({
     id: r.id,
     orgId: r.org_id,
-    projectId: r.project_id,
-    projectName: r.project_name,
     ownerId: r.owner_id,
     ownerName: r.owner_name,
     ownerEmail: r.owner_email,
@@ -111,7 +101,6 @@ export function listBoards(orgId: string, filter?: { ownerId?: string; projectId
     managerId: r.manager_id || null,
     managerName: r.manager_name || r.approved_by || null,
     title: r.title,
-    cycle: r.cycle,
     status: r.status,
     lockVersion: r.lock_version,
     revisionNumber: r.revision_number,
@@ -120,6 +109,7 @@ export function listBoards(orgId: string, filter?: { ownerId?: string; projectId
     approvedAt: r.approved_at,
     approvedBy: r.approved_by,
     unlockedAt: r.unlocked_at,
+    notes: r.notes || null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     items: itemsByBoardId[r.id] || [],
@@ -156,9 +146,8 @@ export function createProjectRecord(project: {
 
 export function getBoardById(boardId: string, orgId: string, requestingUser?: AuthUser): GoalBoard {
   const row = goalsDb.query<any, [string, string]>(`
-    SELECT b.*, p.name as project_name, u.manager_name as manager_name, u.manager_id as manager_id
+    SELECT b.*, u.manager_name as manager_name, u.manager_id as manager_id
     FROM goal_boards b 
-    LEFT JOIN projects p ON b.project_id = p.id 
     LEFT JOIN users u ON b.owner_id = u.id
     WHERE b.id = ? AND b.org_id = ?
   `).get(boardId, orgId);
@@ -187,7 +176,8 @@ export function getBoardById(boardId: string, orgId: string, requestingUser?: Au
   `).all(boardId).map(i => ({
     id: i.id, boardId: i.board_id, title: i.title, description: i.description, category: i.category,
     targetDate: i.target_date, weight: i.weight, progressPercent: i.progress_percent, status: i.status,
-    sortOrder: i.sort_order, createdAt: i.created_at, updatedAt: i.updated_at,
+    sortOrder: i.sort_order, priority: (i.priority as any) || 'MEDIUM', targetQtr: i.target_qtr || null,
+    plansCount: Number(i.plans_count) || 0, createdAt: i.created_at, updatedAt: i.updated_at,
   }));
 
   const rawComments = allowedTimeline ? goalsDb.query<any, [string]>(`
@@ -202,8 +192,6 @@ export function getBoardById(boardId: string, orgId: string, requestingUser?: Au
   return {
     id: row.id,
     orgId: row.org_id,
-    projectId: row.project_id,
-    projectName: row.project_name,
     ownerId: row.owner_id,
     ownerName: row.owner_name,
     ownerEmail: row.owner_email,
@@ -211,7 +199,6 @@ export function getBoardById(boardId: string, orgId: string, requestingUser?: Au
     managerId: row.manager_id || null,
     managerName: row.manager_name || row.approved_by || null,
     title: row.title,
-    cycle: row.cycle,
     status: currentStatus,
     lockVersion: row.lock_version,
     revisionNumber: row.revision_number,
@@ -220,6 +207,7 @@ export function getBoardById(boardId: string, orgId: string, requestingUser?: Au
     approvedAt: row.approved_at,
     approvedBy: row.approved_by,
     unlockedAt: row.unlocked_at,
+    notes: row.notes || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     items,
@@ -253,58 +241,49 @@ export function createBoard(input: CreateBoardInput, user: AuthUser): GoalBoard 
   if (!input.title || input.title.trim().length === 0) {
     throw new ValidationError('Goal board title is required.');
   }
-  if (!input.projectId) {
-    throw new ValidationError('Assigned project is required.');
-  }
-  if (!input.cycle || input.cycle.trim().length === 0) {
-    throw new ValidationError('Evaluation cycle is required.');
-  }
 
   const id = `board_${crypto.randomUUID()}`;
   const now = Date.now();
   const orgId = user.orgId || 'org_default';
 
-  // Verify project belongs to org
-  const project = goalsDb.query<any, [string, string]>('SELECT * FROM projects WHERE id = ? AND org_id = ?').get(input.projectId, orgId);
-  if (!project) {
-    throw new NotFoundError('Selected project not found in this organization.');
-  }
-
   if (user && user.id) {
     try { upsertUser(user); } catch (_) {}
   }
 
+  const defaultNotes = input.notes || 'Targeting completion of strategic goals by end of next quarter. Regular 1:1 check-ins established with manager.';
   goalsDb.run(`
-    INSERT INTO goal_boards (id, org_id, project_id, owner_id, owner_name, owner_email, owner_department, title, cycle, status, lock_version, revision_number, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', 1, 1, ?, ?)
+    INSERT INTO goal_boards (id, org_id, owner_id, owner_name, owner_email, owner_department, title, status, lock_version, revision_number, notes, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'DRAFT', 1, 1, ?, ?, ?)
   `, [
-    id,
-    orgId,
-    input.projectId,
-    user.id,
-    user.displayName,
-    user.email,
-    user.department || 'General',
-    input.title.trim(),
-    input.cycle.trim(),
-    now,
-    now,
+    id, orgId, user.id, user.displayName, user.email,
+    user.department || 'General', input.title.trim(), defaultNotes, now, now,
   ]);
 
-  const defaultTargetDate = getCycleDefaultTargetDate(input.cycle);
+  const defaultTargetDate = getCycleDefaultTargetDate();
 
-  // Insert an initial starter milestone
-  goalsDb.run(`
-    INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, created_at, updated_at)
-    VALUES (?, ?, 'Define initial milestone deliverables', 'Outline project deliverables and target verification metrics.', 'DELIVERABLE', ?, 100, 0, 'PENDING', 1, ?, ?)
-  `, [`item_${id}_1`, id, defaultTargetDate, now, now]);
+  // Seed starter tri-deck items (matching the showcase standard)
+  const starterItems = [
+    { title: 'Fastify API Framework', cat: 'CORE_SKILL', prio: 'MEDIUM', weight: 25, qtr: null, plans: 0 },
+    { title: 'Docker Containers', cat: 'CORE_SKILL', prio: 'CRITICAL', weight: 25, qtr: null, plans: 0 },
+    { title: 'TypeScript Integration', cat: 'STRATEGIC_SKILL', prio: 'CRITICAL', weight: 25, qtr: null, plans: 0 },
+    { title: 'PostgreSQL Architecture', cat: 'STRATEGIC_SKILL', prio: 'LOW', weight: 25, qtr: null, plans: 0 },
+    { title: 'GraphQL Federation', cat: 'SKILL_GAP', prio: 'LOW', weight: 0, qtr: null, plans: 0 },
+    { title: 'OpenTelemetry Deep Dive', cat: 'STRATEGIC_PLAN', prio: 'MEDIUM', weight: 0, qtr: 'Q2', plans: 0 }
+  ];
+
+  starterItems.forEach((st, idx) => {
+    goalsDb.run(`
+      INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, priority, target_qtr, plans_count, created_at, updated_at)
+      VALUES (?, ?, ?, '', ?, ?, ?, 0, 'PENDING', ?, ?, ?, ?, ?, ?)
+    `, [`item_${id}_${idx + 1}`, id, st.title, st.cat, defaultTargetDate, st.weight, idx + 1, st.prio, st.qtr, st.plans, now, now]);
+  });
 
   // Persist BOARD_CREATED activity in timeline
   const createCommId = `comm_${crypto.randomUUID()}`;
   goalsDb.run(`
     INSERT INTO review_comments (id, board_id, item_id, author_id, author_name, author_role, comment_text, type, created_at)
     VALUES (?, ?, null, ?, ?, ?, ?, 'BOARD_CREATED', ?)
-  `, [createCommId, id, user.id, user.displayName, user.jobTitle || 'Contributor', `Goal Board created for ${project.name} (${input.cycle.trim()}).`, now]);
+  `, [createCommId, id, user.id, user.displayName, user.jobTitle || 'Contributor', `Goal Board created: ${input.title.trim()}.`, now]);
 
   return getBoardById(id, orgId);
 }
@@ -335,21 +314,23 @@ export function updateGoalItems(boardId: string, input: UpdateGoalItemsInput, us
       if (existingIds.has(itemId)) {
         goalsDb.run(`
           UPDATE goal_items 
-          SET title = ?, description = ?, category = ?, target_date = ?, weight = ?, progress_percent = ?, status = ?, sort_order = ?, updated_at = ?
+          SET title = ?, description = ?, category = ?, target_date = ?, weight = ?, progress_percent = ?, status = ?, sort_order = ?, priority = ?, target_qtr = ?, plans_count = ?, updated_at = ?
           WHERE id = ? AND board_id = ?
         `, [
-          item.title.trim(), item.description?.trim() || '', item.category || 'DELIVERABLE',
-          item.targetDate || getCycleDefaultTargetDate(board.cycle), sanitizedWeight, sanitizedProgress,
-          item.status || 'PENDING', index + 1, now, itemId, boardId,
+          item.title.trim(), item.description?.trim() || '', item.category || 'CORE_SKILL',
+          item.targetDate || getCycleDefaultTargetDate(), sanitizedWeight, sanitizedProgress,
+          item.status || 'PENDING', index + 1, item.priority || 'MEDIUM', item.targetQtr || null,
+          Number(item.plansCount) || 0, now, itemId, boardId,
         ]);
       } else {
         goalsDb.run(`
-          INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO goal_items (id, board_id, title, description, category, target_date, weight, progress_percent, status, sort_order, priority, target_qtr, plans_count, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
-          itemId, boardId, item.title.trim(), item.description?.trim() || '', item.category || 'DELIVERABLE',
-          item.targetDate || getCycleDefaultTargetDate(board.cycle), sanitizedWeight, sanitizedProgress,
-          item.status || 'PENDING', index + 1, now, now,
+          itemId, boardId, item.title.trim(), item.description?.trim() || '', item.category || 'CORE_SKILL',
+          item.targetDate || getCycleDefaultTargetDate(), sanitizedWeight, sanitizedProgress,
+          item.status || 'PENDING', index + 1, item.priority || 'MEDIUM', item.targetQtr || null,
+          Number(item.plansCount) || 0, now, now,
         ]);
       }
     });
@@ -406,8 +387,8 @@ export function submitBoard(boardId: string, user: AuthUser): GoalBoard {
     const hasManager = Boolean(user.managerId);
     const remId = `rem_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
     const notificationMsg = hasManager
-      ? `${board.ownerName} submitted "${board.title}" (${board.cycle}) for manager review.`
-      : `${board.ownerName} submitted "${board.title}" (${board.cycle}) for review (No manager assigned - routed to Admin).`;
+      ? `${board.ownerName} submitted "${board.title}" for manager review.`
+      : `${board.ownerName} submitted "${board.title}" for review (No manager assigned - routed to Admin).`;
 
     goalsDb.run(`
       INSERT INTO reminders (id, org_id, user_id, board_id, type, message, due_date, is_dismissed, created_at)

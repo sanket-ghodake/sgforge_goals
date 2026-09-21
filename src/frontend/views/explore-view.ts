@@ -21,7 +21,6 @@ function getAvatarGradient(name: string): string {
 export function renderExploreView(user: AuthUser, boards: GoalBoard[]): string {
   const publicBoards = boards.filter(b => b.status === 'SUBMITTED' || b.status === 'APPROVED' || b.status === 'COMPLETED' || b.ownerId === user.id);
   const departments = Array.from(new Set(publicBoards.map(b => b.ownerDepartment).filter(Boolean))).sort();
-  const cycles = Array.from(new Set(publicBoards.map(b => b.cycle).filter(Boolean))).sort();
 
   const totalBoards = publicBoards.length;
   const totalSquads = departments.length;
@@ -74,10 +73,10 @@ export function renderExploreView(user: AuthUser, boards: GoalBoard[]): string {
             </div>
           </div>
           <div class="luxe-hud-card" style="padding: 24px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;"><h3 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">${icons.target} Review Status & Cycle Distribution</h3><span class="luxe-tag">${totalBoards} Cards Total</span></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;"><h3 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">${icons.target} Review Status & Alignment Distribution</h3><span class="luxe-tag">${totalBoards} Cards Total</span></div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
               <div style="background: var(--forge-bg-surface); border: 1px solid var(--forge-border); border-radius: 12px; padding: 14px;"><div style="font-size: 0.75rem; color: var(--forge-text-muted); margin-bottom: 4px;">Approved Ratio</div><div style="font-size: 1.4rem; font-weight: 700; color: var(--forge-success);">${Math.round((approvedCount / (totalBoards || 1)) * 100)}%</div></div>
-              <div style="background: var(--forge-bg-surface); border: 1px solid var(--forge-border); border-radius: 12px; padding: 14px;"><div style="font-size: 0.75rem; color: var(--forge-text-muted); margin-bottom: 4px;">Active Cycles</div><div style="font-size: 1.4rem; font-weight: 700; color: var(--forge-primary);">${cycles.length}</div></div>
+              <div style="background: var(--forge-bg-surface); border: 1px solid var(--forge-border); border-radius: 12px; padding: 14px;"><div style="font-size: 0.75rem; color: var(--forge-text-muted); margin-bottom: 4px;">In Review Queue</div><div style="font-size: 1.4rem; font-weight: 700; color: var(--forge-primary);">${inReviewCount}</div></div>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 14px; border-top: 1px solid var(--forge-border);"><span style="font-size: 0.8rem; color: var(--forge-text-muted);">Ready to inspect data grid?</span><button class="btn-action btn-primary" onclick="window.switchExploreTab && window.switchExploreTab('table', document.getElementById('tabBtnTable'))" style="height: 32px; font-size: 0.775rem;">Open Table View ${icons.arrowRight}</button></div>
           </div>
@@ -102,13 +101,12 @@ export function renderExploreView(user: AuthUser, boards: GoalBoard[]): string {
                   const safeTitle = escapeHtml(b.title);
                   const safeOwner = escapeHtml(b.ownerName);
                   const safeDept = escapeHtml(b.ownerDepartment);
-                  const safeProject = escapeHtml(b.projectName || 'General Project');
                   const safeManager = escapeHtml(b.managerName || b.approvedBy || 'Unassigned');
                   const initials = getInitials(b.ownerName);
                   const avatarGradient = getAvatarGradient(b.ownerName);
 
                   return `
-                    <tr class="explore-table-row" data-index="${idx}" data-title="${safeTitle.toLowerCase()}" data-owner="${safeOwner.toLowerCase()}" data-project="${safeProject.toLowerCase()}" data-manager="${safeManager.toLowerCase()}">
+                    <tr class="explore-table-row" data-index="${idx}" data-title="${safeTitle.toLowerCase()}" data-owner="${safeOwner.toLowerCase()}" data-manager="${safeManager.toLowerCase()}">
                       <td style="padding: 16px 20px;">
                         <div style="display: flex; align-items: center; gap: 12px;">
                           <div style="width: 32px; height: 32px; border-radius: 50%; background: ${avatarGradient}; color: #ffffff; font-weight: 700; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.25); flex-shrink: 0;">${initials}</div>
@@ -121,7 +119,7 @@ export function renderExploreView(user: AuthUser, boards: GoalBoard[]): string {
                       <td style="padding: 16px 20px;">
                         <div style="display: flex; flex-direction: column; gap: 3px;">
                           <a href="?tab=board&id=${b.id}" onclick="navigateSpa('board', '${b.id}', event)" style="color: var(--forge-text-main); font-weight: 700; text-decoration: none; font-size: 0.9rem;" onmouseover="this.style.color='var(--forge-primary)'" onmouseout="this.style.color='var(--forge-text-main)'">${safeTitle}</a>
-                          <span style="font-size: 0.75rem; color: var(--forge-primary); display: inline-flex; align-items: center; gap: 4px;">${icons.folder} ${safeProject}</span>
+                          <span style="font-size: 0.75rem; color: var(--forge-text-muted); display: inline-flex; align-items: center; gap: 4px;">${icons.layers} Rev ${Number(b.revisionNumber) || 1}</span>
                         </div>
                       </td>
                       <td style="padding: 16px 20px;">
@@ -176,14 +174,13 @@ export function renderExploreView(user: AuthUser, boards: GoalBoard[]): string {
           const safeTitle = escapeHtml(b.title);
           const safeOwner = escapeHtml(b.ownerName);
           const safeDept = escapeHtml(b.ownerDepartment);
-          const safeProject = escapeHtml(b.projectName || 'General Project');
           const initials = getInitials(b.ownerName);
           const avatarGradient = getAvatarGradient(b.ownerName);
           return `
-            <div class="explore-board-card luxe-hud-card" data-title="${safeTitle.toLowerCase()}" data-owner="${safeOwner.toLowerCase()}" data-project="${safeProject.toLowerCase()}" style="display: flex; flex-direction: column;">
+            <div class="explore-board-card luxe-hud-card" data-title="${safeTitle.toLowerCase()}" data-owner="${safeOwner.toLowerCase()}" style="display: flex; flex-direction: column;">
               <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                <span style="font-size: 0.75rem; font-weight: 600; color: var(--forge-primary); display: inline-flex; align-items: center; gap: 6px;">${icons.folder} ${safeProject}</span>
-                <span style="font-size: 0.75rem; padding: 2px 8px; border-radius: 9999px; background: rgba(255,255,255,0.06); color: var(--forge-text-muted); font-weight: 600;">${escapeHtml(b.cycle)}</span>
+                <span style="font-size: 0.75rem; font-weight: 600; color: var(--forge-primary); display: inline-flex; align-items: center; gap: 6px;">${icons.target} Milestone Blueprint</span>
+                <span style="font-size: 0.75rem; padding: 2px 8px; border-radius: 9999px; background: rgba(255,255,255,0.06); color: var(--forge-text-muted); font-weight: 600;">Rev ${Number(b.revisionNumber) || 1}</span>
               </div>
               <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 12px;"><a href="?tab=board&id=${b.id}" onclick="navigateSpa('board', '${b.id}', event)" style="color: var(--forge-text-main); text-decoration: none;">${safeTitle}</a></h3>
               <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">

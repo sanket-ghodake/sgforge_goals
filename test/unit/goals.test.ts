@@ -107,14 +107,11 @@ describe('Tier 1 Unit: Individual Goal Center Database & Invariants [LLR-APP-002
     const sampleBoard = {
       id: 'board_test_sub',
       orgId: 'org_default',
-      projectId: 'proj_alpha',
-      projectName: 'Apollo Mission',
       ownerId: 'usr_rep_1',
       ownerName: 'Vikramaditya Patel',
       ownerEmail: 'vikram@forge.internal',
       ownerDepartment: 'Accounting & Billing',
       title: 'Q3 Financial Consolidation',
-      cycle: '2026-Q3',
       status: 'REWORK_REQUESTED' as const,
       lockVersion: 1,
       revisionNumber: 2,
@@ -152,7 +149,7 @@ describe('Tier 1 Unit: Individual Goal Center Database & Invariants [LLR-APP-002
     expect(html).not.toContain('sgforge');
   });
 
-  it('Arrange, Act, Assert: renders "No Team Flight Plans Submitted" when multi-tier manager has 0 boards', async () => {
+  it('Arrange, Act, Assert: renders "No Team Goal Plans Submitted" when multi-tier manager has 0 boards', async () => {
     const { renderTeamReviewsSection } = await import('../../src/frontend/views/team-reviews-list');
     const directorUser = {
       id: 'usr_director',
@@ -165,7 +162,7 @@ describe('Tier 1 Unit: Individual Goal Center Database & Invariants [LLR-APP-002
     };
 
     const html = renderTeamReviewsSection(directorUser, []);
-    expect(html).toContain('No Team Flight Plans Submitted');
+    expect(html).toContain('No Team Goal Plans Submitted');
     expect(html).toContain('Multi-Tier Leadership');
     expect(html).not.toContain('SG Forge');
     expect(html).not.toContain('sgforge');

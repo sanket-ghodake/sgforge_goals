@@ -57,7 +57,7 @@ describe('Tier 5 E2E: Team Reviews Organizational Hierarchy Journeys', () => {
       expect(html).toContain('individual contributors');
       expect(html).toContain('Switch to My Submissions');
       // Must not render confusing empty search bar or redundant empty cards
-      expect(html).not.toContain('No Team Flight Plans Submitted');
+      expect(html).not.toContain('No Team Goal Plans Submitted');
       expect(html).not.toContain('SG Forge');
       expect(html).not.toContain('sgforge');
     } finally {
@@ -74,8 +74,8 @@ describe('Tier 5 E2E: Team Reviews Organizational Hierarchy Journeys', () => {
 
     try {
       goalsDb.run(`
-        INSERT INTO goal_boards (id, org_id, project_id, owner_id, owner_name, owner_email, owner_department, title, cycle, status, lock_version, revision_number, created_at, updated_at)
-        VALUES (?, 'org_default', 'proj-core', 'usr-amit-dev', 'Amitabh Mukherjee', 'amitabh.mukherjee@forge.internal', 'Platform Engineering', 'Telemetry Pipeline Stream', '2026-Q3', 'SUBMITTED', 1, 1, ?, ?)
+        INSERT INTO goal_boards (id, org_id, owner_id, owner_name, owner_email, owner_department, title, status, lock_version, revision_number, created_at, updated_at)
+        VALUES (?, 'org_default', 'usr-amit-dev', 'Amitabh Mukherjee', 'amitabh.mukherjee@forge.internal', 'Platform Engineering', 'Telemetry Pipeline Stream', 'SUBMITTED', 1, 1, ?, ?)
       `, [tempBoardId, Date.now(), Date.now()]);
 
       // Act: Fetch reviews tab
@@ -116,7 +116,7 @@ describe('Tier 5 E2E: Team Reviews Organizational Hierarchy Journeys', () => {
       // Assert
       expect(res.status).toBe(200);
       expect(html).toContain('Multi-Tier Leadership');
-      expect(html).toContain('No Team Flight Plans Submitted');
+      expect(html).toContain('No Team Goal Plans Submitted');
       expect(html).toContain('Switch to My Submissions');
       expect(html).not.toContain('SG Forge');
       expect(html).not.toContain('sgforge');
@@ -166,7 +166,7 @@ describe('Tier 5 E2E: Team Reviews Organizational Hierarchy Journeys', () => {
 
       // Assert
       expect(res.status).toBe(200);
-      expect(html).toContain('Apex Contributor Mode: Your flight plans are self-governed and do not require manager approval submission cycles.');
+      expect(html).toContain('Apex Contributor Mode: Your goal plans are self-governed and do not require manager approval submission cycles.');
       expect(html).toContain('Self-Governed');
       expect(html).not.toContain('SG Forge');
       expect(html).not.toContain('sgforge');
@@ -185,8 +185,8 @@ describe('Tier 5 E2E: Team Reviews Organizational Hierarchy Journeys', () => {
     try {
       // Create a draft board for apex user with managerId = null
       goalsDb.run(`
-        INSERT INTO goal_boards (id, org_id, project_id, owner_id, owner_name, owner_email, owner_department, title, cycle, status, lock_version, revision_number, created_at, updated_at)
-        VALUES (?, 'org_default', 'proj-core', 'usr-superadmin', 'Rajesh Sharma', 'superadmin@forge.internal', 'Executive', 'Apex Strategic Initiatives', '2026-Q3', 'DRAFT', 1, 1, ?, ?)
+        INSERT INTO goal_boards (id, org_id, owner_id, owner_name, owner_email, owner_department, title, status, lock_version, revision_number, created_at, updated_at)
+        VALUES (?, 'org_default', 'usr-superadmin', 'Rajesh Sharma', 'superadmin@forge.internal', 'Executive', 'Apex Strategic Initiatives', 'DRAFT', 1, 1, ?, ?)
       `, [tempBoardId, Date.now(), Date.now()]);
 
       // Act: Fetch board view (?tab=board&id=...)
@@ -198,7 +198,7 @@ describe('Tier 5 E2E: Team Reviews Organizational Hierarchy Journeys', () => {
       // Assert
       expect(res.status).toBe(200);
       expect(html).toContain('Apex Profile: No Manager Above • No Submission Cycle');
-      expect(html).toContain('Self-governed milestone flight plan.');
+      expect(html).toContain('Self-governed milestone goal plan.');
       expect(html).toContain('Self-Governed');
       expect(html).not.toContain('SG Forge');
       expect(html).not.toContain('sgforge');
@@ -218,8 +218,8 @@ describe('Tier 5 E2E: Team Reviews Organizational Hierarchy Journeys', () => {
 
     try {
       goalsDb.run(`
-        INSERT INTO goal_boards (id, org_id, project_id, owner_id, owner_name, owner_email, owner_department, title, cycle, status, lock_version, revision_number, created_at, updated_at)
-        VALUES (?, 'org_default', 'proj-core', 'usr-superadmin', 'Rajesh Sharma', 'superadmin@forge.internal', 'Executive', 'Global Expansion Vector', '2026-Q3', 'DRAFT', 1, 1, ?, ?)
+        INSERT INTO goal_boards (id, org_id, owner_id, owner_name, owner_email, owner_department, title, status, lock_version, revision_number, created_at, updated_at)
+        VALUES (?, 'org_default', 'usr-superadmin', 'Rajesh Sharma', 'superadmin@forge.internal', 'Executive', 'Global Expansion Vector', 'DRAFT', 1, 1, ?, ?)
       `, [tempBoardId, Date.now(), Date.now()]);
 
       goalsDb.run(`

@@ -33,7 +33,7 @@ export function renderDashboardView(user: AuthUser, boards: GoalBoard[], project
   const completionPercent = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) : 0;
 
   const now = new Date();
-  const activeCycle = myBoards[0]?.cycle || `${now.getFullYear()}-Q${Math.floor(now.getMonth() / 3) + 1}`;
+  const activeCycle = `${now.getFullYear()}-Q${Math.floor(now.getMonth() / 3) + 1}`;
 
   return `
     <div style="margin-bottom: 28px;">
@@ -151,7 +151,7 @@ export function renderDashboardView(user: AuthUser, boards: GoalBoard[], project
               <span style="color: var(--forge-primary);">${icons.activity}</span> ${escapeHtml(activeCycle)} Milestone Velocity
             </h2>
             <p style="font-size: 0.8rem; color: var(--forge-text-muted);">
-              Overall progress across ${totalMilestones} milestones across all assigned flight plans.
+              Overall progress across ${totalMilestones} milestones across all assigned goal plans.
             </p>
           </div>
           <div style="font-size: 1.5rem; font-weight: 700; color: var(--forge-primary);">

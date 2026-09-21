@@ -51,9 +51,7 @@ describe('Tier 2 Integration: Goal Center REST API Dispatcher', () => {
           'Cookie': `forge_session=${token}`,
         },
         body: JSON.stringify({
-          projectId: project.id,
-          title: 'Integ Test Flight Plan',
-          cycle: '2026-Q1',
+          title: 'Integ Test Goal Plan',
         }),
       });
       const board = await createRes.json();
@@ -162,7 +160,7 @@ describe('Tier 2 Integration: Goal Center REST API Dispatcher', () => {
       const newBoardRes = await fetch(`${baseUrl}/api/boards`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Cookie': `forge_session=${token}` },
-        body: JSON.stringify({ projectId: proj.id, title: 'Comment Board', cycle: '2026-Q1' }),
+        body: JSON.stringify({ title: 'Comment Board' }),
       });
       const createdBoard = await newBoardRes.json();
       const targetBoardId = createdBoard.id;
@@ -284,7 +282,7 @@ describe('Tier 2 Integration: Goal Center REST API Dispatcher', () => {
       const boardRes = await fetch(`${baseUrl}/api/boards`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Cookie': `forge_session=${empToken}` },
-        body: JSON.stringify({ projectId: proj.id, title: 'Rework Flight Plan', cycle: '2026-Q1' }),
+        body: JSON.stringify({ title: 'Rework Goal Plan' }),
       });
       const board = await boardRes.json();
 

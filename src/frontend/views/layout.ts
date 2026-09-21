@@ -7,7 +7,7 @@
 
 import { icons } from '../../lib/icons';
 import { getModernSelectAndConfirmScripts, cleanDisplayName, escapeHtml } from '../../lib/ui';
-import { getAstryxToastScript, getAstryxTooltipScript } from '../../lib/ui';
+import { getAstryxToastScript, getAstryxTooltipScript, getHeadStateScript } from '../../lib/ui';
 import { getReviewDrawerScript } from './review-drawer';
 import { renderNewBoardModal, renderRemindersDrawer, renderReworkModal, renderLogoutModal, renderUniversalConfirmModal } from './modals';
 import type { AuthUser, Reminder } from '../../lib/types';
@@ -50,6 +50,7 @@ export function renderLayout(options: LayoutOptions): string {
       };
     })();
   </script>
+  ${getHeadStateScript()}
   <link rel="stylesheet" href="assets/app.css">
   <style>
     /* Critical CSS fallback variables */
@@ -348,18 +349,12 @@ export function renderLayout(options: LayoutOptions): string {
 
     function openNewBoardModal() {
       const modal = document.getElementById('newBoardModal');
-      if (modal) modal.classList.add('open');
-      fetch('api/projects')
-        .then(res => res.json())
-        .then(projects => {
-          if (window.updateModernSelectOptions) {
-            window.updateModernSelectOptions('boardProjectSelect', projects.map(p => ({
-              value: p.id,
-              label: p.name + ' (' + p.code + ')'
-            })), 'Select an active project...');
-          }
-        })
-        .catch(() => {});
+      if (modal) {
+        const input = document.getElementById('boardTitleInput');
+        if (input) input.value = '';
+        modal.classList.add('open');
+        setTimeout(() => { if (input) input.focus(); }, 80);
+      }
     }
 
     function closeNewBoardModal() {
@@ -385,23 +380,25 @@ export function renderLayout(options: LayoutOptions): string {
 
     function handleCreateBoard(e) {
       e.preventDefault();
-      const projInput = document.getElementById('boardProjectSelect_input') || document.getElementById('boardProjectSelect');
-      const projectId = projInput ? projInput.value : '';
-      const title = document.getElementById('boardTitleInput').value;
-      const cycleInput = document.getElementById('boardCycleSelect_input') || document.getElementById('boardCycleSelect');
-      const cycle = cycleInput ? cycleInput.value : '';
+      const titleInput = document.getElementById('boardTitleInput');
+      const title = titleInput ? titleInput.value.trim() : '';
 
-      if (!projectId) {
-        if (window.astryxToast) window.astryxToast('Please select a project for the goal board.', 'warning');
+      if (!title) {
+        if (window.astryxToast) window.astryxToast('Please provide a title for the goal board.', 'warning');
         return;
       }
 
       fetch('api/boards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, title, cycle })
+        body: JSON.stringify({ title })
       })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          return res.json().then(data => { throw new Error(data.detail || data.error || 'Failed to create board'); });
+        }
+        return res.json();
+      })
       .then(board => {
         closeNewBoardModal();
         if (window.astryxToast) window.astryxToast('Goal Board created successfully!', 'success');

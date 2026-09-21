@@ -35,9 +35,8 @@ function assertManagerOrAdmin(user: AuthUser, board?: GoalBoard): void {
 
 export function listPendingReviews(orgId: string): GoalBoard[] {
   const query = `
-    SELECT b.*, p.name as project_name 
+    SELECT b.* 
     FROM goal_boards b 
-    LEFT JOIN projects p ON b.project_id = p.id 
     WHERE b.org_id = ? AND b.status = 'SUBMITTED'
     ORDER BY b.submitted_at ASC
   `;
@@ -45,14 +44,11 @@ export function listPendingReviews(orgId: string): GoalBoard[] {
   return rows.map(r => ({
     id: r.id,
     orgId: r.org_id,
-    projectId: r.project_id,
-    projectName: r.project_name,
     ownerId: r.owner_id,
     ownerName: r.owner_name,
     ownerEmail: r.owner_email,
     ownerDepartment: r.owner_department,
     title: r.title,
-    cycle: r.cycle,
     status: r.status,
     lockVersion: r.lock_version,
     revisionNumber: r.revision_number,

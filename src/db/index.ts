@@ -61,13 +61,11 @@ goalsDb.run(`
   CREATE TABLE IF NOT EXISTS goal_boards (
     id TEXT PRIMARY KEY,
     org_id TEXT NOT NULL,
-    project_id TEXT NOT NULL,
     owner_id TEXT NOT NULL,
     owner_name TEXT NOT NULL,
     owner_email TEXT NOT NULL,
     owner_department TEXT NOT NULL,
     title TEXT NOT NULL,
-    cycle TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'DRAFT',
     lock_version INTEGER NOT NULL DEFAULT 1,
     revision_number INTEGER NOT NULL DEFAULT 1,
@@ -76,14 +74,57 @@ goalsDb.run(`
     approved_at INTEGER,
     approved_by TEXT,
     unlocked_at INTEGER,
+    notes TEXT,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    FOREIGN KEY (project_id) REFERENCES projects(id)
+    updated_at INTEGER NOT NULL
   );
 `);
 
+// Migration: Drop project_id and cycle from existing goal_boards table if present
+try {
+  const gbCols = goalsDb.query<any, []>('PRAGMA table_info(goal_boards)').all();
+  const hasProjectCol = gbCols.some(c => c.name === 'project_id');
+  const hasCycleCol = gbCols.some(c => c.name === 'cycle');
+  if (hasProjectCol || hasCycleCol) {
+    goalsDb.run('PRAGMA foreign_keys = OFF;');
+    goalsDb.run(`
+      CREATE TABLE IF NOT EXISTS goal_boards_migration (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        owner_name TEXT NOT NULL,
+        owner_email TEXT NOT NULL,
+        owner_department TEXT NOT NULL,
+        title TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'DRAFT',
+        lock_version INTEGER NOT NULL DEFAULT 1,
+        revision_number INTEGER NOT NULL DEFAULT 1,
+        submission_deadline TEXT,
+        submitted_at INTEGER,
+        approved_at INTEGER,
+        approved_by TEXT,
+        unlocked_at INTEGER,
+        notes TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+    goalsDb.run(`
+      INSERT INTO goal_boards_migration (id, org_id, owner_id, owner_name, owner_email, owner_department, title, status, lock_version, revision_number, submission_deadline, submitted_at, approved_at, approved_by, unlocked_at, notes, created_at, updated_at)
+      SELECT id, org_id, owner_id, owner_name, owner_email, owner_department, title, status, lock_version, revision_number, submission_deadline, submitted_at, approved_at, approved_by, unlocked_at, notes, created_at, updated_at
+      FROM goal_boards;
+    `);
+    goalsDb.run('DROP TABLE goal_boards;');
+    goalsDb.run('ALTER TABLE goal_boards_migration RENAME TO goal_boards;');
+    goalsDb.run('PRAGMA foreign_keys = ON;');
+  }
+} catch (e: any) {
+  logger.warn('Failed to migrate goal_boards table', { error: e?.message || String(e) });
+}
+
 try { goalsDb.run('ALTER TABLE goal_boards ADD COLUMN submission_deadline TEXT'); } catch (_) {}
 try { goalsDb.run('ALTER TABLE goal_boards ADD COLUMN unlocked_at INTEGER'); } catch (_) {}
+try { goalsDb.run('ALTER TABLE goal_boards ADD COLUMN notes TEXT'); } catch (_) {}
 
 goalsDb.run(`
   CREATE TABLE IF NOT EXISTS goal_items (
@@ -102,6 +143,10 @@ goalsDb.run(`
     FOREIGN KEY (board_id) REFERENCES goal_boards(id) ON DELETE CASCADE
   );
 `);
+
+try { goalsDb.run('ALTER TABLE goal_items ADD COLUMN priority TEXT DEFAULT "MEDIUM"'); } catch (_) {}
+try { goalsDb.run('ALTER TABLE goal_items ADD COLUMN target_qtr TEXT'); } catch (_) {}
+try { goalsDb.run('ALTER TABLE goal_items ADD COLUMN plans_count INTEGER DEFAULT 0'); } catch (_) {}
 
 goalsDb.run(`
   CREATE TABLE IF NOT EXISTS review_comments (

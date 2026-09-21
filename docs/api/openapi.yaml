@@ -86,6 +86,41 @@ paths:
                     $ref: '#/components/schemas/AuthUser'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /api/auth/refresh:
+    post:
+      summary: Refresh Active Session Token
+      description: Exchanges a valid forge_refresh_token cookie for a fresh short-lived session token with Refresh Token Rotation (RTR).
+      operationId: refreshSessionToken
+      tags:
+        - Auth
+      parameters:
+        - in: cookie
+          name: forge_refresh_token
+          schema:
+            type: string
+          description: Rotating refresh token cookie
+      responses:
+        '200':
+          description: Session renewed successfully.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Fresh forge_session and rotated forge_refresh_token cookies.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: SUCCESS
+                  accessToken:
+                    type: string
+                  message:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /api/auth/users:
     get:
       summary: List Local Users
@@ -225,14 +260,8 @@ paths:
               type: object
               required:
                 - title
-                - projectId
-                - cycle
               properties:
                 title:
-                  type: string
-                projectId:
-                  type: string
-                cycle:
                   type: string
       responses:
         '201':
@@ -535,15 +564,11 @@ components:
           type: string
         orgId:
           type: string
-        projectId:
-          type: string
         ownerId:
           type: string
         ownerName:
           type: string
         title:
-          type: string
-        cycle:
           type: string
         status:
           type: string

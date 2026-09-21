@@ -207,7 +207,7 @@ export function getLayoutStyles(): string {
     .btn-outline:hover { background: rgba(79, 70, 229, 0.08); border-color: var(--forge-border-medium); transform: translateY(-1px); }
     .btn-outline:active { transform: scale(0.97); }
 
-    .shadcn-select, select.milestone-category-select, select#drawerCommentItemSelect {
+    .shadcn-select, select.milestone-category-select {
       width: 100%; height: 40px; border-radius: var(--radius-btn); background-color: var(--forge-bg-surface);
       border: 1px solid var(--forge-border-medium); color: var(--forge-text-main); padding: 0 34px 0 14px;
       font-size: 0.875rem; font-weight: 500; appearance: none; -webkit-appearance: none;
@@ -215,10 +215,10 @@ export function getLayoutStyles(): string {
       background-repeat: no-repeat; background-position: right 12px center; cursor: pointer;
       transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
-    .shadcn-select:hover, select.milestone-category-select:hover, select#drawerCommentItemSelect:hover {
+    .shadcn-select:hover, select.milestone-category-select:hover {
       border-color: var(--forge-primary); background-color: var(--forge-bg-card);
     }
-    .shadcn-select:focus, select.milestone-category-select:focus, select#drawerCommentItemSelect:focus {
+    .shadcn-select:focus, select.milestone-category-select:focus {
       outline: none; border-color: var(--forge-primary); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.25);
     }
     .shadcn-select option, select option {

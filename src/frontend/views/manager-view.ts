@@ -45,7 +45,7 @@ export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects:
         <div>
           <h1 style="font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px;">Reviews & Approvals Hub</h1>
           <p style="color: var(--forge-text-muted); font-size: 0.875rem;">
-            Track your own board submission progress, or inspect and review team flight plans with real-time feedback timelines.
+            Track your own board submission progress, or inspect and review team goal plans with real-time feedback timelines.
           </p>
         </div>
 
@@ -74,7 +74,7 @@ export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects:
                   Apex Leadership • No Upward Manager Assigned • No Submission Cycle
                 </div>
                 <div style="font-size: 0.8rem; color: var(--forge-text-muted); line-height: 1.4;">
-                  You currently have no reporting manager mapped in the organization directory. As an apex leader, your flight plans do not enter a manager submission review cycle and remain self-governed.
+                  You currently have no reporting manager mapped in the organization directory. As an apex leader, your goal plans do not enter a manager submission review cycle and remain self-governed.
                 </div>
               </div>
             </div>
@@ -110,7 +110,7 @@ export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects:
               <span style="color: var(--forge-success);">${icons.award}</span>
             </div>
             <div class="luxe-metric-val" style="color: var(--forge-success);">${myApprovedCount}</div>
-            <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Immutable flight plans</div>
+            <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Immutable goal plans</div>
           </div>
 
           <div class="luxe-hud-card">
@@ -142,7 +142,7 @@ export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects:
             return `
               <div style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; backdrop-filter: blur(12px); transition: border-color 0.2s ease, transform 0.2s ease;" onmouseover="this.style.borderColor='var(--forge-border-medium)'" onmouseout="this.style.borderColor='var(--forge-border)'">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                  <span style="font-size: 0.75rem; font-weight: 600; color: var(--forge-primary);">${escapeHtml(b.projectName || 'Project')}</span>
+                  <span style="font-size: 0.75rem; font-weight: 600; color: var(--forge-primary); display: inline-flex; align-items: center; gap: 6px;">${icons.target} Milestone Blueprint</span>
                   <span style="font-size: 0.75rem; font-weight: 600; padding: 3px 10px; border-radius: 9999px; ${statusBadge.style}">
                     ${statusBadge.label}
                   </span>
@@ -153,7 +153,6 @@ export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects:
                 </h3>
 
                 <div style="font-size: 0.8rem; color: var(--forge-text-muted); margin-bottom: 18px; display: flex; gap: 14px;">
-                  <span>${icons.calendar} ${escapeHtml(b.cycle)}</span>
                   <span>${icons.layers} Rev ${Number(b.revisionNumber) || 1}</span>
                   <span>${icons.clock} ${new Date(b.updatedAt).toLocaleDateString()}</span>
                 </div>
@@ -200,7 +199,7 @@ export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects:
               <span style="color: var(--forge-success);">${icons.award}</span>
             </div>
             <div class="luxe-metric-val" style="color: var(--forge-success);">${teamApprovedCount}</div>
-            <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Formally approved flight plans</div>
+            <div style="font-size: 0.75rem; color: var(--forge-text-muted);">Formally approved goal plans</div>
           </div>
 
           <div class="luxe-hud-card">

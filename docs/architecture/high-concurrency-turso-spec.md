@@ -17,7 +17,7 @@ Traditional client-server databases (e.g., PostgreSQL or MySQL) fail at this con
 3. **Memory Bloat:** Server processes holding database connection pools quickly exceed 1 GB RAM.
 
 ### The Solution: Turso libSQL Embedded Replica Pattern
-1. **Microsecond Local Reads:** 95% of requests (browsing dashboards, checking review timelines, viewing flight plans) query the local libSQL database file on NVMe/RAM via C-bindings at **0.02ms latency**. Zero TCP socket overhead.
+1. **Microsecond Local Reads:** 95% of requests (browsing dashboards, checking review timelines, viewing goal plans) query the local libSQL database file on NVMe/RAM via C-bindings at **0.02ms latency**. Zero TCP socket overhead.
 2. **Write Pipelining & Background Sync:** State modifications (submitting boards, updating progress, manager signoffs) are executed locally in WAL mode with background replication to the primary Turso cloud instance.
 3. **SingleFlight Request Coalescing:** Eliminates thundering-herd spikes by collapsing identical concurrent requests into a single promise execution.
 4. **L1 Bounded In-Memory Cache:** Bounded LRU cache with TTL eliminates repeated outbound Central Auth directory calls.

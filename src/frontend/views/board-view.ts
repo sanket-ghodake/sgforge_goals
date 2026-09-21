@@ -1,20 +1,22 @@
 /**
- * Individual Goal Center - Board Canvas View (Tab 2)
- * Renders the interactive milestone editor, role-scoped review controls, and lock state banners.
+ * Individual Goal Center - Board Canvas View (2026 LTS)
+ * Tri-Deck Canvas: Active Program Bar, 1. Key Skills, 2. Skill Gaps, 3. Training Plans, and Notes.
+ * Strict Zero-Emojis Standard, 3-Priority Badges (Critical, Medium, Low), and Zero Browser Defaults.
  * @requirements [HLR-UI-201] [LLR-SUB-001] [HLR-GOALS-001] [LLR-GOALS-002]
  */
 
 import { icons } from '../../lib/icons';
-import { escapeHtml, renderModernSelectHtml } from '../../lib/ui';
+import { escapeHtml } from '../../lib/ui';
 import type { AuthUser, GoalBoard, GoalItem } from '../../lib/types';
-import { getCycleDefaultTargetDate } from '../../backend/services/board-service';
+import { getBoardStyles } from './board-styles';
+import { renderEditBoardModal, renderExportModal, renderQuickAddModal } from './board-modals';
+import { renderGapRow, renderLockBanner, renderPlanCard, renderSkillRow } from './board-components';
 
 /**
  * renderBoardView
  * @requirements [HLR-UI-201] [LLR-GOALS-001]
  */
-export function renderBoardView(user: AuthUser, board: GoalBoard): string {
-  const defaultTargetDate = getCycleDefaultTargetDate(board.cycle);
+export function renderBoardView(user: AuthUser, board: GoalBoard, userBoards: GoalBoard[] = []): string {
   const isOwner = board.ownerId === user.id;
   const isReviewer = !isOwner && (user.roles.includes('roles/manager') || user.roles.includes('roles/admin') || user.roles.includes('roles/super_admin'));
   const canAccessReview = isOwner || isReviewer;
@@ -27,63 +29,109 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
   const isLocked = isSubmitted || isApproved || isOverdue || isUnlockRequested;
   const canEdit = isOwner && !isLocked;
 
-  const items = board.items || [];
-  const comments = board.comments || [];
-  const totalWeight = items.reduce((acc, item) => acc + (Number(item.weight) || 0), 0);
-  const isWeightValid = totalWeight === 100;
+  const items: GoalItem[] = board.items || [];
   const safeBoardTitle = escapeHtml(board.title);
-  const safeOwnerName = escapeHtml(board.ownerName);
+  const effectiveBoards = userBoards.length > 0 ? userBoards : [board];
+  const safeNotes = escapeHtml(board.notes || 'Targeting completion of strategic goals by end of next quarter. Regular 1:1 check-ins established with manager.');
+
+  // Categorize tri-deck items
+  const coreSkills = items.filter(i => i.category === 'CORE_SKILL' || i.category === 'DELIVERABLE');
+  const strategicSkills = items.filter(i => i.category === 'STRATEGIC_SKILL' || i.category === 'METRIC');
+  const skillGaps = items.filter(i => i.category === 'SKILL_GAP');
+  const strategicPlans = items.filter(i => i.category === 'STRATEGIC_PLAN' || i.category === 'LEARNING');
+  const tacticalPlans = items.filter(i => i.category === 'TACTICAL_PLAN');
+  const allPlans = [...strategicPlans, ...tacticalPlans];
+  const donePlans = allPlans.filter(i => i.status === 'COMPLETED').length;
+
+  // Compute gap severities
+  const gapCrit = skillGaps.filter(i => (i.priority || 'MEDIUM') === 'CRITICAL').length;
+  const gapMed = skillGaps.filter(i => (i.priority || 'MEDIUM') === 'MEDIUM').length;
+  const gapLow = skillGaps.filter(i => (i.priority || 'MEDIUM') === 'LOW').length;
 
   return `
-    <div style="margin-bottom: 28px;">
-      <!-- Breadcrumb & Top Bar -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-        <div style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--forge-text-muted);">
-          <a href="?tab=boards" onclick="navigateSpa('boards', null, event)" style="color: var(--forge-text-muted); text-decoration: none;">Goal Boards</a>
-          <span>/</span>
-          <span style="color: var(--forge-text-main); font-weight: 600;">${safeBoardTitle}</span>
+    <style>${getBoardStyles()}</style>
+
+    <div class="board-canvas-wrap">
+      <!-- 1. Top Bar: Board / Program Switcher & Action Buttons -->
+      <div class="board-top-bar">
+        <div class="board-switcher-group">
+          <span class="board-switcher-label">Active Program:</span>
+          <div class="board-switcher-container">
+            <button type="button" class="board-switcher-badge" onclick="window.toggleBoardSwitcherMenu && window.toggleBoardSwitcherMenu()" data-astryx-tooltip="Switch between available goal boards">
+              <span style="display:flex; color: var(--forge-primary);">${icons.folder}</span>
+              <span style="max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${safeBoardTitle}</span>
+              <span style="display:flex; color: var(--forge-text-muted);">${icons.chevronDown}</span>
+            </button>
+
+            <!-- Dropdown Menu of User's Boards -->
+            <div class="board-switcher-menu" id="boardSwitcherMenu">
+              <div style="font-size: 0.72rem; font-weight: 700; color: var(--forge-text-muted); padding: 4px 10px 8px; border-bottom: 1px solid var(--forge-border); text-transform: uppercase; letter-spacing: 0.05em; display: flex; justify-content: space-between; align-items: center;">
+                <span>My Goal Boards</span>
+                <span style="background: rgba(99, 102, 241, 0.12); color: var(--forge-primary); padding: 1px 6px; border-radius: 9999px; font-size: 0.7rem;">${effectiveBoards.length}</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px; max-height: 240px; overflow-y: auto; padding: 4px 0;">
+                ${effectiveBoards.map(b => {
+                  const isActive = b.id === board.id;
+                  return `
+                    <div class="board-switcher-item ${isActive ? 'active' : ''}" onclick="window.toggleBoardSwitcherMenu(false); navigateSpa('board', '${escapeHtml(b.id)}', event);">
+                      <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                        <span style="color: ${isActive ? 'var(--forge-primary)' : 'var(--forge-text-muted)'}; display: flex;">${icons.fileText}</span>
+                        <div style="min-width: 0;">
+                          <div style="font-size: 0.82rem; font-weight: ${isActive ? '700' : '600'}; color: var(--forge-text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(b.title)}</div>
+                          <div style="font-size: 0.7rem; color: var(--forge-text-muted); display: flex; gap: 6px; align-items: center;">
+                            <span>Rev ${Number(b.revisionNumber) || 1}</span>
+                            <span>&bull;</span>
+                            <span>${escapeHtml(b.status)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      ${isActive ? `<span style="color: var(--forge-primary); display: flex;">${icons.check}</span>` : ''}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+              <div style="border-top: 1px solid var(--forge-border); padding-top: 6px; margin-top: 2px; display: flex; justify-content: space-between; align-items: center;">
+                <button type="button" class="btn-action btn-outline" style="height: 28px; font-size: 0.72rem; padding: 0 8px;" onclick="window.toggleBoardSwitcherMenu(false); openNewBoardModal();">
+                  ${icons.plus} New Board
+                </button>
+                <button type="button" class="btn-action btn-outline" style="height: 28px; font-size: 0.72rem; padding: 0 8px;" onclick="window.toggleBoardSwitcherMenu(false); navigateSpa('boards', null, event);">
+                  All Boards ${icons.arrowRight}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-          ${canAccessReview ? `
-            <button class="btn-action btn-outline" onclick="openReviewDrawer('${board.id}')" data-astryx-tooltip="Open live review timeline & feedback history">
-              ${icons.messageSquare} Review Timeline (${comments.length})
+        <div class="board-action-toolbar">
+          ${canEdit ? `
+            <button class="board-btn-icon green" onclick="openQuickAddModal('CORE_SKILL')" data-astryx-tooltip="Add Item (Skill, Gap, Plan)">
+              ${icons.plus}
+            </button>
+            <button class="board-btn-icon" onclick="openEditBoardModal()" data-astryx-tooltip="Edit Board Title & Cycle">
+              ${icons.edit}
             </button>
           ` : ''}
 
-          ${isReviewer ? `
-            <button class="btn-action btn-outline" onclick="handleSetDeadlinePrompt('${board.id}')" data-astryx-tooltip="Set or extend submission deadline date">
-              ${icons.calendar} Set Deadline (${escapeHtml(board.submissionDeadline || 'None')})
+          <button class="board-btn-icon" onclick="handleCloneBoard('${board.id}')" data-astryx-tooltip="Duplicate Goal Plan">
+            ${icons.copy}
+          </button>
+
+          <button class="board-btn-icon" onclick="openExportModal()" data-astryx-tooltip="Export or Download Summary">
+            ${icons.download}
+          </button>
+
+          ${canAccessReview ? `
+            <button class="board-btn-icon" onclick="openReviewDrawer('${board.id}')" data-astryx-tooltip="Open Live Review Timeline & Audit Log">
+              ${icons.rotateCcw}
             </button>
           ` : ''}
 
           ${canEdit ? `
-            <button class="btn-action btn-outline" onclick="autoDistributeWeights()" data-astryx-tooltip="Auto-distribute milestone weights equally to 100%">
-              ${icons.target} Auto-Balance 100%
+            <button class="board-btn-icon green" onclick="submitBoardForReview()" data-astryx-tooltip="${isRework ? 'Resubmit for Review' : 'Submit Goal Plan'}">
+              ${icons.send}
             </button>
-            <button class="btn-action btn-outline" onclick="saveBoardDraft()">
-              ${icons.check} Save Draft
-            </button>
-            ${!board.managerId && !board.managerName ? `
-              <button class="btn-action btn-primary" onclick="submitBoardForReview()" ${!isWeightValid ? 'disabled data-astryx-tooltip="Total weight must equal 100%" style="opacity: 0.5; cursor: not-allowed;"' : 'data-astryx-tooltip="No manager assigned - self-seal milestone flight plan"'}>
-                ${icons.send} Self-Seal Flight Plan
-              </button>
-            ` : `
-              <button class="btn-action btn-primary" onclick="submitBoardForReview()" ${!isWeightValid ? 'disabled data-astryx-tooltip="Total weight must equal 100%" style="opacity: 0.5; cursor: not-allowed;"' : ''}>
-                ${icons.send} ${isRework ? 'Resubmit for Approval' : 'Submit Board'}
-              </button>
-            `}
-          ` : ''}
-
-          ${isOwner && isLocked ? `
-            <button class="btn-action btn-outline" style="color: var(--forge-warning); border-color: rgba(245, 158, 11, 0.4);" onclick="handleRequestUnlock('${board.id}')">
-              ${icons.lock} Request Unlock
-            </button>
-          ` : ''}
-
-          ${isReviewer && isLocked ? `
-            <button class="btn-action btn-outline" style="color: var(--forge-success); border-color: rgba(16, 185, 129, 0.4);" onclick="handleUnlockBoard('${board.id}')">
-              ${icons.lock} Manager Unlock
+            <button class="board-btn-icon red" onclick="handleDeleteBoard('${board.id}')" data-astryx-tooltip="Delete Draft Board">
+              ${icons.trash}
             </button>
           ` : ''}
         </div>
@@ -92,397 +140,348 @@ export function renderBoardView(user: AuthUser, board: GoalBoard): string {
       <!-- Lock & Status Banner -->
       ${renderLockBanner(board)}
 
-      <!-- Board Header Card -->
-      <div style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 16px; padding: 24px; margin-bottom: 24px;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
-          <div>
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
-              <span style="font-size: 0.8rem; font-weight: 700; color: var(--forge-primary); font-family: monospace;">${escapeHtml(board.projectName || 'Project')}</span>
-              <span style="font-size: 0.75rem; background: rgba(255,255,255,0.06); padding: 2px 8px; border-radius: 4px; font-weight: 600;">${escapeHtml(board.cycle)}</span>
-              <span style="font-size: 0.75rem; color: var(--forge-text-muted);">Rev ${board.revisionNumber}</span>
-            </div>
-            <h2 style="font-size: 1.4rem; font-weight: 700; margin-bottom: 6px;">${safeBoardTitle}</h2>
-            <div style="font-size: 0.85rem; color: var(--forge-text-muted); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px;">
-              <span>Contributor: <strong style="color: var(--forge-text-main);">${safeOwnerName}</strong></span>
-              <span>&bull;</span>
-              <span>Dept: <strong style="color: var(--forge-text-main);">${escapeHtml(board.ownerDepartment)}</strong></span>
-              <span>&bull;</span>
-              <span>
-                Assigned Manager: ${user.managerName ? `
-                  <strong style="color: var(--forge-text-main);">${escapeHtml(user.managerName)}</strong>
-                ` : `
-                  <span style="color: var(--forge-warning); font-size: 0.75rem; background: rgba(245, 158, 11, 0.12); padding: 2px 8px; border-radius: 9999px; border: 1px solid rgba(245, 158, 11, 0.3); font-weight: 600;">
-                    No Manager Assigned (Admin Review Mode)
-                  </span>
-                `}
-              </span>
-            </div>
+      <!-- 2. Three Column Tri-Deck Grid -->
+      <div class="tri-deck-grid">
+        <!-- COLUMN 1: KEY SKILLS REQUIRED -->
+        <div class="tri-deck-card">
+          <div class="tri-deck-header blue">
+            <span>1. KEY SKILLS REQUIRED</span>
+            <span class="tri-deck-pill">${coreSkills.length} Core &bull; ${strategicSkills.length} Strategic</span>
           </div>
-
-          <!-- Total Weight Progress Indicator -->
-          <div style="min-width: 220px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border); border-radius: 12px; padding: 14px 18px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px;">
-              <span style="color: var(--forge-text-muted);">Total Milestone Weight:</span>
-              <span id="totalWeightDisplay" style="color: ${isWeightValid ? 'var(--forge-success)' : 'var(--forge-warning)'};">${totalWeight}%</span>
-            </div>
-            <div style="height: 6px; background: rgba(255,255,255,0.08); border-radius: 9999px; overflow: hidden;">
-              <div id="weightProgressBar" style="height: 100%; width: ${Math.min(totalWeight, 100)}%; background: ${isWeightValid ? 'var(--forge-success)' : 'var(--forge-warning)'}; transition: width 0.3s ease;"></div>
-            </div>
-            <div style="font-size: 0.7rem; color: var(--forge-text-muted); margin-top: 6px; text-align: right;">
-              ${isWeightValid ? 'Valid 100% allocation' : 'Must equal 100% to submit'}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Milestone Items List Section -->
-      <div style="margin-bottom: 24px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-          <h3 style="font-size: 1.1rem; font-weight: 700;">Milestones & Target Metrics</h3>
-          ${canEdit ? `
-            <button class="btn-action btn-outline" onclick="addMilestoneRow()" style="font-size: 0.8rem;">
-              ${icons.plus} Add Milestone Card
-            </button>
-          ` : ''}
-        </div>
-
-        <div id="milestonesContainer" style="display: flex; flex-direction: column; gap: 14px;">
-          ${items.map((item, index) => renderMilestoneCard(item, index + 1, canEdit, board.status === 'APPROVED' || board.status === 'COMPLETED', defaultTargetDate)).join('')}
-        </div>
-      </div>
-
-      <!-- Review Feedback Stream Preview Card -->
-      ${comments.length > 0 ? `
-        <div style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 16px; padding: 20px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-            <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--forge-text-main);">Recent Review Critique & Notes</h4>
-            <button class="btn-action btn-outline" onclick="openReviewDrawer('${board.id}')" style="font-size: 0.775rem;">
-              ${icons.messageSquare} Open Live Review Timeline
-            </button>
-          </div>
-          <div style="display: flex; flex-direction: column; gap: 10px;">
-            ${comments.slice(-3).map(c => `
-              <div style="background: var(--forge-bg-surface); border: 1px solid var(--forge-border); border-radius: 8px; padding: 10px 14px; font-size: 0.825rem;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                  <span style="font-weight: 700; color: var(--forge-primary);">${escapeHtml(c.authorName)} (${escapeHtml(c.authorRole)})</span>
-                  <span style="color: var(--forge-text-muted); font-size: 0.75rem;">${new Date(c.createdAt).toLocaleDateString()}</span>
-                </div>
-                <div style="color: var(--forge-text-main);">${escapeHtml(c.commentText)}</div>
+          <div class="tri-deck-body">
+            <div>
+              <div class="tri-deck-section-title blue">Core / Technical Skills</div>
+              <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px;">
+                ${coreSkills.map(s => renderSkillRow(board.id, s, canEdit)).join('')}
               </div>
-            `).join('')}
-          </div>
-        </div>
-      ` : ''}
-    </div>
+              ${canEdit ? `
+                <button class="btn-add-action" onclick="openQuickAddModal('CORE_SKILL')">
+                  ${icons.plus} Add skill
+                </button>
+              ` : ''}
+            </div>
 
-    <!-- Deadline Selection Modal (Zero Browser Default) -->
-    <div class="modal-backdrop" id="deadlineModal" onclick="if(event.target === this) closeDeadlineModal()">
-      <div class="modal-box" style="max-width: 420px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-          <h3 style="font-size: 1.1rem; font-weight: 700;">Set Submission Deadline</h3>
-          <button class="btn-icon" onclick="closeDeadlineModal()">${icons.close}</button>
+            <div>
+              <div class="tri-deck-section-title blue">Transformation / Strategic Skills</div>
+              <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px;">
+                ${strategicSkills.map(s => renderSkillRow(board.id, s, canEdit)).join('')}
+              </div>
+              ${canEdit ? `
+                <button class="btn-add-action" onclick="openQuickAddModal('STRATEGIC_SKILL')">
+                  ${icons.plus} Add skill
+                </button>
+              ` : ''}
+            </div>
+          </div>
         </div>
-        <form onsubmit="submitSetDeadline(event)">
-          <input type="hidden" id="deadlineBoardId" />
-          <div style="margin-bottom: 16px;">
-            <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--forge-text-muted);">Deadline Date (YYYY-MM-DD)</label>
-            <input type="date" id="deadlineInput" required value="${escapeHtml(board.submissionDeadline || defaultTargetDate)}" style="width: 100%; height: 38px; border-radius: 8px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 0 12px; font-size: 0.9rem;" />
+
+        <!-- COLUMN 2: SKILL GAPS -->
+        <div class="tri-deck-card">
+          <div class="tri-deck-header red">
+            <span>2. SKILL GAPS</span>
+            <span class="tri-deck-pill">${gapCrit} Critical &bull; ${gapMed} Medium &bull; ${gapLow} Low</span>
           </div>
-          <div style="display: flex; justify-content: flex-end; gap: 10px;">
-            <button type="button" class="btn-action btn-outline" onclick="closeDeadlineModal()">Cancel</button>
-            <button type="submit" class="btn-action btn-primary">${icons.check} Save Deadline</button>
+          <div class="tri-deck-body" style="justify-content: space-between;">
+            <div>
+              <div class="tri-deck-section-title red">Gaps Identified</div>
+              <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
+                ${skillGaps.map(g => renderGapRow(board.id, g, canEdit)).join('')}
+              </div>
+            </div>
+            ${canEdit ? `
+              <button class="btn-add-action" onclick="openQuickAddModal('SKILL_GAP')">
+                ${icons.plus} Add gap
+              </button>
+            ` : ''}
           </div>
-        </form>
+        </div>
+
+        <!-- COLUMN 3: TRAINING PLANS -->
+        <div class="tri-deck-card">
+          <div class="tri-deck-header green">
+            <span>3. TRAINING PLANS</span>
+            <span class="tri-deck-pill">${donePlans}/${allPlans.length} Done</span>
+          </div>
+          <div class="tri-deck-body">
+            <div>
+              <div class="tri-deck-section-title green">Strategic Plan</div>
+              <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px;">
+                ${strategicPlans.length > 0 ? strategicPlans.map(p => renderPlanCard(board.id, p, canEdit)).join('') : `
+                  <div style="font-size: 0.8rem; color: var(--forge-text-muted); font-style: italic; padding: 4px 0;">No strategic plans scheduled.</div>
+                `}
+              </div>
+              ${canEdit ? `
+                <button class="btn-add-action" onclick="openQuickAddModal('STRATEGIC_PLAN')">
+                  ${icons.plus} Add item
+                </button>
+              ` : ''}
+            </div>
+
+            <div>
+              <div class="tri-deck-section-title green">Tactical Plan</div>
+              <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px;">
+                ${tacticalPlans.length > 0 ? tacticalPlans.map(p => renderPlanCard(board.id, p, canEdit)).join('') : `
+                  <div style="font-size: 0.8rem; color: var(--forge-text-muted); font-style: italic; padding: 4px 0;">No tactical plans scheduled.</div>
+                `}
+              </div>
+              ${canEdit ? `
+                <button class="btn-add-action" onclick="openQuickAddModal('TACTICAL_PLAN')">
+                  ${icons.plus} Add item
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Bottom Notes Bar -->
+      <div class="board-notes-card">
+        <span class="notes-label">Notes:</span>
+        <textarea class="notes-textarea" id="boardNotesInput" ${!canEdit ? 'readonly' : ''} oninput="handleNotesChange('${board.id}', this.value)" placeholder="Strategic goal notes, milestones context, or 1:1 check-in cadence...">${safeNotes}</textarea>
       </div>
     </div>
 
+    <!-- Modals -->
+    ${renderQuickAddModal(board.id)}
+    ${renderEditBoardModal(board)}
+    ${renderExportModal(board)}
+
+    <!-- Client-Side Runtime Engine -->
     <script>
       window.currentBoardId = "${board.id}";
-      window.boardCycleDefaultDate = "${defaultTargetDate}";
 
-      window.recalculateWeights = function() {
-        const weightInputs = document.querySelectorAll('.milestone-weight-input');
-        let total = 0;
-        weightInputs.forEach(input => {
-          total += Number(input.value) || 0;
-        });
-        const display = document.getElementById('totalWeightDisplay');
-        const bar = document.getElementById('weightProgressBar');
-        if (display) display.innerText = total + '%';
-        if (bar) {
-          bar.style.width = Math.min(total, 100) + '%';
-          bar.style.background = total === 100 ? 'var(--forge-success)' : 'var(--forge-warning)';
+      window.toggleBoardSwitcherMenu = function(forceState) {
+        const menu = document.getElementById('boardSwitcherMenu');
+        if (!menu) return;
+        if (forceState !== undefined) {
+          if (forceState) menu.classList.add('open');
+          else menu.classList.remove('open');
+        } else {
+          menu.classList.toggle('open');
         }
       };
 
-      window.autoDistributeWeights = function() {
-        const weightInputs = document.querySelectorAll('.milestone-weight-input');
-        if (weightInputs.length === 0) return;
-        const baseWeight = Math.floor(100 / weightInputs.length);
-        const remainder = 100 - (baseWeight * weightInputs.length);
-        weightInputs.forEach((input, index) => {
-          input.value = index === 0 ? baseWeight + remainder : baseWeight;
+      if (!window._boardSwitcherClickBound) {
+        window._boardSwitcherClickBound = true;
+        document.addEventListener('click', function(e) {
+          if (!e.target.closest('.board-switcher-container')) {
+            const menu = document.getElementById('boardSwitcherMenu');
+            if (menu) menu.classList.remove('open');
+          }
         });
-        window.recalculateWeights();
-        if (window.astryxToast) window.astryxToast('Milestone weights auto-distributed to 100%', 'info');
+      }
+
+      window.openQuickAddModal = function(defaultCat) {
+        const modal = document.getElementById('quickAddItemModal');
+        if (defaultCat && window.selectModernOption) {
+          const labels = {
+            CORE_SKILL: '1. Key Skills: Core / Technical Skill',
+            STRATEGIC_SKILL: '1. Key Skills: Transformation / Strategic Skill',
+            SKILL_GAP: '2. Skill Gaps: Identified Gap',
+            STRATEGIC_PLAN: '3. Training Plans: Strategic Plan',
+            TACTICAL_PLAN: '3. Training Plans: Tactical Plan'
+          };
+          window.selectModernOption('quickAddCategorySelect', defaultCat, labels[defaultCat] || defaultCat);
+        }
+        if (modal) modal.classList.add('open');
       };
 
-      window.addMilestoneRow = function() {
-        const container = document.getElementById('milestonesContainer');
-        if (!container) return;
-        const index = container.querySelectorAll('.milestone-card').length + 1;
-        const div = document.createElement('div');
-        const defaultDate = window.boardCycleDefaultDate || '';
-        div.innerHTML = \`
-          <div class="milestone-card" data-id="" style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 10px; padding: 18px; position: relative;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 0.8rem; font-weight: 700; color: var(--forge-primary);">Milestone #\${index}</span>
-                <span style="font-size: 0.75rem; background: rgba(255,255,255,0.06); padding: 2px 8px; border-radius: 4px; font-weight: 600;">DELIVERABLE</span>
-              </div>
-              <button type="button" onclick="const c=this.closest('.milestone-card'); window.showModernConfirm ? window.showModernConfirm({ title:'Remove Milestone', message:'Remove this milestone deliverable from the flight plan?', confirmText:'Remove', confirmVariant:'destructive', onConfirm:()=>{ c.remove(); window.recalculateWeights(); } }) : (c.remove(), window.recalculateWeights())" class="btn-icon" data-astryx-tooltip="Remove milestone" style="width:24px; height:24px;">${icons.trash}</button>
-            </div>
-            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-              <div>
-                <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Title</label>
-                <input type="text" class="milestone-title-input" value="" placeholder="New deliverable title..." style="width:100%; height:34px; border-radius:6px; background:var(--forge-bg-surface); border:1px solid var(--forge-border-medium); color:var(--forge-text-main); padding:0 8px; font-size:0.85rem;" />
-              </div>
-              <div>
-                <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Category</label>
-                <div class="modern-select-wrap" id="select_new_cat_\${index}">
-                  <button type="button" class="modern-select-trigger" onclick="window.toggleModernSelect && window.toggleModernSelect('select_new_cat_\${index}')" style="height:34px;">
-                    <span class="modern-select-label">Deliverable</span>
-                    <span class="modern-select-arrow">${icons.chevronDown}</span>
-                  </button>
-                  <div class="modern-select-menu">
-                    <div class="modern-select-option selected" data-value="DELIVERABLE" onclick="window.selectModernOption && window.selectModernOption('select_new_cat_\${index}', 'DELIVERABLE', 'Deliverable')">Deliverable</div>
-                    <div class="modern-select-option" data-value="METRIC" onclick="window.selectModernOption && window.selectModernOption('select_new_cat_\${index}', 'METRIC', 'Metric')">Metric</div>
-                    <div class="modern-select-option" data-value="LEARNING" onclick="window.selectModernOption && window.selectModernOption('select_new_cat_\${index}', 'LEARNING', 'Learning')">Learning</div>
-                  </div>
-                  <input type="hidden" class="milestone-category-select" id="select_new_cat_\${index}_input" value="DELIVERABLE" />
-                </div>
-              </div>
-              <div>
-                <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Target Date</label>
-                <input type="date" class="milestone-target-date-input" value="\${defaultDate}" style="width:100%; height:34px; border-radius:6px; background:var(--forge-bg-surface); border:1px solid var(--forge-border-medium); color:var(--forge-text-main); padding:0 6px; font-size:0.8rem;" />
-              </div>
-              <div>
-                <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Weight (%)</label>
-                <input type="number" class="milestone-weight-input" min="5" max="100" value="10" oninput="window.recalculateWeights && window.recalculateWeights()" style="width:100%; height:34px; border-radius:6px; background:var(--forge-bg-surface); border:1px solid var(--forge-border-medium); color:var(--forge-text-main); padding:0 8px; font-size:0.85rem;" />
-              </div>
-            </div>
-            <div style="margin-bottom: 12px;">
-              <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Description</label>
-              <textarea class="milestone-desc-input" rows="2" style="width:100%; border-radius:6px; background:var(--forge-bg-surface); border:1px solid var(--forge-border-medium); color:var(--forge-text-main); padding:6px 8px; font-size:0.85rem;"></textarea>
-            </div>
-            <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--forge-border); padding-top: 10px; font-size: 0.8rem;">
-              <span style="color: var(--forge-text-muted);">${icons.calendar} Target: \${defaultDate}</span>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="color: var(--forge-text-muted);">Progress:</span>
-                <input type="range" min="0" max="100" value="0" class="milestone-progress-input modern-range-input" style="width: 80px;" />
-                <span style="font-size: 0.8rem; font-weight: 700; color: var(--forge-primary); min-width: 32px;">0%</span>
-              </div>
-            </div>
-          </div>
-        \`;
-        container.appendChild(div.firstElementChild);
-        window.recalculateWeights();
+      window.closeQuickAddModal = function() {
+        const modal = document.getElementById('quickAddItemModal');
+        if (modal) modal.classList.remove('open');
       };
 
-      window.saveBoardDraft = function() {
-        const cards = document.querySelectorAll('.milestone-card');
-        const items = [];
-        cards.forEach((card) => {
-          items.push({
-            id: card.dataset.id || undefined,
-            title: card.querySelector('.milestone-title-input').value,
-            description: card.querySelector('.milestone-desc-input').value,
-            category: card.querySelector('.milestone-category-select').value,
-            targetDate: card.querySelector('.milestone-target-date-input').value,
-            weight: Number(card.querySelector('.milestone-weight-input').value) || 0,
-            progressPercent: Number(card.querySelector('.milestone-progress-input').value) || 0,
-            status: 'PENDING'
+      window.openEditBoardModal = function() {
+        const modal = document.getElementById('editBoardModal');
+        if (modal) modal.classList.add('open');
+      };
+
+      window.closeEditBoardModal = function() {
+        const modal = document.getElementById('editBoardModal');
+        if (modal) modal.classList.remove('open');
+      };
+
+      window.openExportModal = function() {
+        const modal = document.getElementById('exportBoardModal');
+        if (modal) modal.classList.add('open');
+      };
+
+      window.closeExportModal = function() {
+        const modal = document.getElementById('exportBoardModal');
+        if (modal) modal.classList.remove('open');
+      };
+
+      window.copyExportJson = function() {
+        const textarea = document.getElementById('exportJsonDisplay');
+        if (textarea) {
+          navigator.clipboard.writeText(textarea.value);
+          if (window.astryxToast) window.astryxToast('Board JSON copied to clipboard', 'info');
+        }
+      };
+
+      window.downloadBoardJson = function(boardId) {
+        const textarea = document.getElementById('exportJsonDisplay');
+        if (!textarea) return;
+        const blob = new Blob([textarea.value], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'goal-board-' + boardId + '.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      };
+
+      window.handleQuickAddSubmit = function(e) {
+        e.preventDefault();
+        const cat = document.querySelector('#quickAddCategorySelect input[type="hidden"]')?.value || 'CORE_SKILL';
+        const prio = document.querySelector('#quickAddPrioritySelect input[type="hidden"]')?.value || 'MEDIUM';
+        const qtr = document.querySelector('#quickAddQuarterSelect input[type="hidden"]')?.value || 'Target Qtr';
+        const title = document.getElementById('quickAddTitleInput').value.trim();
+        if (!title) return;
+
+        fetch('api/boards/' + window.currentBoardId)
+          .then(r => r.json())
+          .then(board => {
+            const items = (board.items || []).map(i => ({
+              id: i.id,
+              title: i.title,
+              description: i.description || '',
+              category: i.category,
+              targetDate: i.targetDate,
+              weight: Number(i.weight) || 0,
+              progressPercent: Number(i.progressPercent) || 0,
+              status: i.status || 'PENDING',
+              priority: i.priority || 'MEDIUM',
+              targetQtr: i.targetQtr || null,
+              plansCount: Number(i.plansCount) || 0
+            }));
+
+            items.push({
+              title,
+              description: '',
+              category: cat,
+              targetDate: '2026-03-31',
+              weight: 0,
+              progressPercent: 0,
+              status: 'PENDING',
+              priority: prio,
+              targetQtr: qtr,
+              plansCount: 0
+            });
+
+            return fetch('api/boards/' + window.currentBoardId + '/items', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ items })
+            });
+          })
+          .then(r => {
+            if (!r.ok) throw new Error('Failed to add item');
+            window.closeQuickAddModal();
+            if (window.astryxToast) window.astryxToast('Item added to board', 'success');
+            loadSpaView('board', window.currentBoardId);
+          })
+          .catch(err => { if (window.astryxToast) window.astryxToast(err.message, 'error'); });
+      };
+
+      window.togglePlan = function(boardId, itemId) {
+        fetch('api/boards/' + boardId + '/items/' + itemId + '/toggle', { method: 'PATCH' })
+          .then(r => {
+            if (!r.ok) throw new Error('Toggle failed');
+            return r.json();
+          })
+          .then(() => {
+            loadSpaView('board', boardId);
+          })
+          .catch(err => { if (window.astryxToast) window.astryxToast(err.message, 'error'); });
+      };
+
+      window.handleDeleteItem = function(boardId, itemId) {
+        if (!window.showModernConfirm) return;
+        window.showModernConfirm({
+          title: 'Remove Item',
+          message: 'Remove this item from the board blueprint?',
+          confirmText: 'Remove',
+          confirmVariant: 'destructive',
+          onConfirm: () => {
+            fetch('api/boards/' + boardId)
+              .then(r => r.json())
+              .then(board => {
+                const items = (board.items || []).filter(i => i.id !== itemId).map(i => ({
+                  id: i.id, title: i.title, description: i.description || '', category: i.category,
+                  targetDate: i.targetDate, weight: Number(i.weight) || 0, progressPercent: Number(i.progressPercent) || 0,
+                  status: i.status || 'PENDING', priority: i.priority || 'MEDIUM', targetQtr: i.targetQtr || null,
+                  plansCount: Number(i.plansCount) || 0
+                }));
+                return fetch('api/boards/' + boardId + '/items', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ items })
+                });
+              })
+              .then(() => {
+                if (window.astryxToast) window.astryxToast('Item removed', 'info');
+                loadSpaView('board', boardId);
+              });
+          }
+        });
+      };
+
+      window.handleNotesChange = function(boardId, notes) {
+        clearTimeout(window.boardNotesTimeout);
+        window.boardNotesTimeout = setTimeout(() => {
+          fetch('api/boards/' + boardId + '/notes', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notes })
+          }).then(() => {
+            if (window.astryxToast) window.astryxToast('Notes auto-saved', 'info');
           });
-        });
+        }, 600);
+      };
 
-        fetch('api/boards/' + window.currentBoardId + '/items', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items })
-        })
-        .then(res => {
-          if (!res.ok) return res.json().then(e => { throw new Error(e.detail || e.title || 'Save failed'); });
-          return res.json();
-        })
-        .then(() => {
-          if (window.astryxToast) window.astryxToast('Draft saved successfully', 'success');
-        })
-        .catch(err => { if (window.astryxToast) window.astryxToast(err.message, 'error'); });
+      window.handleCloneBoard = function(boardId) {
+        fetch('api/boards/' + boardId + '/clone', { method: 'POST' })
+          .then(r => r.json())
+          .then(newBoard => {
+            if (window.astryxToast) window.astryxToast('Board duplicated successfully', 'success');
+            navigateSpa('board', newBoard.id);
+          });
+      };
+
+      window.handleDeleteBoard = function(boardId) {
+        if (!window.showModernConfirm) return;
+        window.showModernConfirm({
+          title: 'Delete Draft Board',
+          message: 'Permanently remove this goal board and all milestones?',
+          confirmText: 'Delete Board',
+          confirmVariant: 'destructive',
+          onConfirm: () => {
+            fetch('api/boards/' + boardId, { method: 'DELETE' })
+              .then(r => {
+                if (!r.ok) throw new Error('Deletion failed');
+                if (window.astryxToast) window.astryxToast('Board deleted', 'info');
+                navigateSpa('boards', null);
+              })
+              .catch(err => { if (window.astryxToast) window.astryxToast(err.message, 'error'); });
+          }
+        });
       };
 
       window.submitBoardForReview = function() {
         fetch('api/boards/' + window.currentBoardId + '/submit', { method: 'POST' })
-        .then(res => {
-          if (!res.ok) return res.json().then(e => { throw new Error(e.detail || e.title || 'Submission failed'); });
-          return res.json();
-        })
-        .then(() => {
-          if (window.astryxToast) window.astryxToast('Board submitted to manager. It is now locked against further edits.', 'success');
-          setTimeout(() => { loadSpaView('board', window.currentBoardId); }, 800);
-        })
-        .catch(err => { if (window.astryxToast) window.astryxToast(err.message, 'error'); });
-      };
-
-      window.handleRequestUnlock = function(boardId) {
-        fetch('api/boards/' + boardId + '/review', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ decision: 'REQUEST_UNLOCK', comment: 'Requesting board unlock for milestone revisions.' })
-        })
-        .then(res => res.json())
-        .then(() => {
-          if (window.astryxToast) window.astryxToast('Unlock requested. Manager notified.', 'info');
-          loadSpaView('board', boardId);
-        });
-      };
-
-      window.handleSetDeadlinePrompt = function(boardId) {
-        const modal = document.getElementById('deadlineModal');
-        const hiddenId = document.getElementById('deadlineBoardId');
-        if (hiddenId) hiddenId.value = boardId;
-        if (modal) modal.classList.add('open');
-      };
-
-      window.closeDeadlineModal = function() {
-        const modal = document.getElementById('deadlineModal');
-        if (modal) modal.classList.remove('open');
-      };
-
-      window.submitSetDeadline = function(e) {
-        e.preventDefault();
-        const boardId = document.getElementById('deadlineBoardId').value;
-        const deadline = document.getElementById('deadlineInput').value;
-        fetch('api/boards/' + boardId + '/review', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ decision: 'SET_DEADLINE', deadline })
-        })
-        .then(res => {
-          if (!res.ok) return res.json().then(err => { throw new Error(err.detail || 'Deadline update failed'); });
-          return res.json();
-        })
-        .then(() => {
-          window.closeDeadlineModal();
-          if (window.astryxToast) window.astryxToast('Submission deadline set to ' + deadline, 'info');
-          loadSpaView('board', boardId);
-        })
-        .catch(err => { if (window.astryxToast) window.astryxToast(err.message, 'error'); });
-      };
-
-      window.updateItemProgress = function(boardId, itemId, progressPercent) {
-        const val = Number(progressPercent) || 0;
-        const valSpan = document.getElementById('progressVal_' + itemId);
-        if (valSpan) valSpan.innerText = val + '%';
-
-        fetch('api/boards/' + boardId + '/items/' + itemId + '/progress', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ progressPercent: val })
-        })
-        .then(res => res.json())
-        .then(() => {
-          if (window.astryxToast) window.astryxToast('Milestone progress updated to ' + val + '%', 'success');
-        });
+          .then(r => {
+            if (!r.ok) return r.json().then(e => { throw new Error(e.detail || e.title || 'Submission failed'); });
+            return r.json();
+          })
+          .then(() => {
+            if (window.astryxToast) window.astryxToast('Board submitted for manager review.', 'success');
+            setTimeout(() => { loadSpaView('board', window.currentBoardId); }, 600);
+          })
+          .catch(err => { if (window.astryxToast) window.astryxToast(err.message, 'error'); });
       };
     </script>
-  `;
-}
-
-function renderLockBanner(board: GoalBoard): string {
-  const banners: Record<string, { bg: string; border: string; icon: string; color: string; title: string; text: string }> = {
-    SUBMITTED: { bg: 'var(--forge-warning-bg)', border: 'rgba(251, 191, 36, 0.3)', icon: icons.lock, color: 'var(--forge-warning)', title: 'Goal Board is Locked Under Manager Review', text: `Submitted on ${board.submittedAt ? new Date(board.submittedAt).toLocaleDateString() : 'recently'}. Locked while manager reviews.` },
-    REWORK_REQUESTED: { bg: 'var(--forge-error-bg)', border: 'rgba(248, 113, 113, 0.3)', icon: icons.alertCircle, color: 'var(--forge-error)', title: `Revisions Requested by Manager (Revision ${board.revisionNumber})`, text: 'Manager requested updates. Editing unlocked to incorporate feedback.' },
-    APPROVED: { bg: 'var(--forge-success-bg)', border: 'rgba(52, 211, 153, 0.3)', icon: icons.award, color: 'var(--forge-success)', title: 'Approved & Sealed Milestone Blueprint', text: `Approved on ${board.approvedAt ? new Date(board.approvedAt).toLocaleDateString() : 'Cycle Active'}. Sealed snapshot.` },
-    LOCKED_OVERDUE: { bg: 'var(--forge-error-bg)', border: 'rgba(248, 113, 113, 0.3)', icon: icons.lock, color: 'var(--forge-error)', title: 'Submission Deadline Passed (Auto-Locked)', text: `Deadline (${escapeHtml(board.submissionDeadline)}) passed without submission. Request unlock to extend.` },
-    UNLOCK_REQUESTED: { bg: 'var(--forge-warning-bg)', border: 'rgba(251, 191, 36, 0.3)', icon: icons.infoCircle, color: 'var(--forge-warning)', title: 'Unlock Request Pending Manager Approval', text: 'Unlock request submitted. You will be notified when unlocked.' }
-  };
-  const b = banners[board.status];
-  if (!b) {
-    if (!board.managerId && !board.managerName) {
-      return `<div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 10px; padding: 14px 20px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;"><div style="display: flex; align-items: center; gap: 12px;"><span style="color: var(--forge-primary); display: flex;">${icons.infoCircle}</span><div><div style="font-size: 0.9rem; font-weight: 700; color: var(--forge-text-main);">Apex Profile: No Manager Above • No Submission Cycle</div><div style="font-size: 0.8rem; color: var(--forge-text-muted);">Self-governed milestone flight plan.</div></div></div><span style="font-family: var(--font-mono); font-size: 0.72rem; padding: 3px 10px; border-radius: 9999px; background: rgba(99, 102, 241, 0.15); color: var(--forge-primary); font-weight: 700;">Self-Governed</span></div>`;
-    }
-    return `<div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--forge-border); border-radius: 10px; padding: 14px 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px;"><span style="color: var(--forge-primary); display: flex;">${icons.infoCircle}</span><div style="font-size: 0.825rem; color: var(--forge-text-muted);">Draft Mode: Add project milestones, set relative weights (total 100%), and submit for approval.</div></div>`;
-  }
-  return `<div style="background: ${b.bg}; border: 1px solid ${b.border}; border-radius: 10px; padding: 16px 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 14px;"><span style="color: ${b.color}; display: flex;">${b.icon}</span><div><h4 style="font-size: 0.95rem; font-weight: 700; color: ${b.color}; margin-bottom: 2px;">${b.title}</h4><p style="font-size: 0.8rem; color: var(--forge-text-main);">${b.text}</p></div></div>`;
-}
-
-function renderMilestoneCard(item: GoalItem, index: number, canEdit: boolean, isBoardApproved: boolean = false, fallbackTargetDate: string = '2026-03-31'): string {
-  const safeTitle = escapeHtml(item.title);
-  const safeDesc = escapeHtml(item.description);
-  const safeTargetDate = escapeHtml(item.targetDate || fallbackTargetDate);
-
-  return `
-    <div class="milestone-card" data-id="${item.id}" style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 10px; padding: 18px; position: relative;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 0.8rem; font-weight: 700; color: var(--forge-primary);">Milestone #${index}</span>
-          <span style="font-size: 0.75rem; background: rgba(255,255,255,0.06); padding: 2px 8px; border-radius: 4px; font-weight: 600;">${item.category}</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 6px;">
-          <button type="button" onclick="openReviewDrawer('${item.boardId}', '${item.id}')" class="btn-icon" data-astryx-tooltip="Discuss Milestone in Review Chat" style="width:28px; height:28px; color: var(--forge-primary);">${icons.messageSquare}</button>
-          ${canEdit ? `
-            <button type="button" onclick="const c=this.closest('.milestone-card'); window.showModernConfirm ? window.showModernConfirm({ title:'Remove Milestone', message:'Remove this milestone deliverable from the flight plan?', confirmText:'Remove', confirmVariant:'destructive', onConfirm:()=>{ c.remove(); recalculateWeights(); } }) : (c.remove(), recalculateWeights())" class="btn-icon" data-astryx-tooltip="Remove milestone" style="width:24px; height:24px;">${icons.trash}</button>
-          ` : ''}
-        </div>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-        <div>
-          <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Title</label>
-          <input type="text" class="milestone-title-input" ${!canEdit ? 'readonly' : ''} value="${safeTitle}" style="width:100%; height:34px; border-radius:6px; background:var(--forge-bg-surface); border:1px solid var(--forge-border-medium); color:var(--forge-text-main); padding:0 8px; font-size:0.85rem;" />
-        </div>
-        <div>
-          <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Category</label>
-          ${canEdit ? renderModernSelectHtml({
-            id: `cat_select_${item.id}`,
-            value: item.category,
-            inputClassName: 'milestone-category-select',
-            triggerStyle: 'height:34px;',
-            options: [
-              { value: 'DELIVERABLE', label: 'Deliverable' },
-              { value: 'METRIC', label: 'Metric' },
-              { value: 'LEARNING', label: 'Learning' }
-            ]
-          }) : `
-            <div style="height:34px; padding:0 12px; display:flex; align-items:center; background:var(--forge-bg-surface); border:1px solid var(--forge-border-medium); border-radius:6px; font-size:0.85rem; color:var(--forge-text-muted);">
-              ${escapeHtml(item.category)}
-            </div>
-            <input type="hidden" class="milestone-category-select" value="${escapeHtml(item.category)}" />
-          `}
-        </div>
-        <div>
-          <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Target Date</label>
-          <input type="date" class="milestone-target-date-input" ${!canEdit ? 'readonly' : ''} value="${safeTargetDate}" style="width:100%; height:34px; border-radius:6px; background:var(--forge-bg-surface); border:1px solid var(--forge-border-medium); color:var(--forge-text-main); padding:0 6px; font-size:0.8rem;" />
-        </div>
-        <div>
-          <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Weight (%)</label>
-          <input type="number" class="milestone-weight-input" ${!canEdit ? 'readonly' : ''} min="5" max="100" value="${item.weight}" oninput="window.recalculateWeights && window.recalculateWeights()" style="width:100%; height:34px; border-radius:6px; background:var(--forge-bg-surface); border:1px solid var(--forge-border-medium); color:var(--forge-text-main); padding:0 8px; font-size:0.85rem;" />
-        </div>
-      </div>
-
-      <div style="margin-bottom: 12px;">
-        <label style="display:block; font-size:0.75rem; color:var(--forge-text-muted); margin-bottom:4px;">Description</label>
-        <textarea class="milestone-desc-input" ${!canEdit ? 'readonly' : ''} rows="2" style="width:100%; border-radius:6px; background:var(--forge-bg-surface); border:1px solid var(--forge-border-medium); color:var(--forge-text-main); padding:6px 8px; font-size:0.85rem;">${safeDesc}</textarea>
-      </div>
-
-      <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--forge-border); padding-top: 10px; font-size: 0.8rem;">
-        <span style="color: var(--forge-text-muted);">${icons.calendar} Target: ${safeTargetDate}</span>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="color: var(--forge-text-muted);">Progress:</span>
-          <input type="range" min="0" max="100" value="${item.progressPercent}" class="milestone-progress-input modern-range-input" ${!isBoardApproved ? 'disabled data-astryx-tooltip="Milestone progress can only be updated on approved boards"' : ''} oninput="window.updateItemProgress && window.updateItemProgress('${item.boardId}', '${item.id}', this.value)" style="width: 80px; ${!isBoardApproved ? 'opacity: 0.5; cursor: not-allowed;' : ''}" />
-          <span id="progressVal_${item.id}" style="font-size: 0.8rem; font-weight: 700; color: var(--forge-primary); min-width: 32px;">${item.progressPercent}%</span>
-        </div>
-      </div>
-    </div>
   `;
 }

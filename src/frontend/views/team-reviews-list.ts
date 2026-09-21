@@ -82,7 +82,7 @@ function renderNoTeamUnderView(): string {
     icons.users,
     'Directory Verified',
     'No Team Under You',
-    'The organization directory confirms that you currently have zero direct reports or subordinate team members assigned under your hierarchy. When employees report to you and submit flight plans, they will appear here.'
+    'The organization directory confirms that you currently have zero direct reports or subordinate team members assigned under your hierarchy. When employees report to you and submit goal plans, they will appear here.'
   );
 }
 
@@ -91,7 +91,7 @@ function renderNoSubordinateManagersEmptyView(): string {
     icons.shieldCheck,
     'Frontline Leadership • Directory Verified',
     'No Team of Managers Under You',
-    'Your direct reports in the organization directory are individual contributors. None of your direct reports hold people management roles, and no team flight plans have been submitted for review yet.',
+    'Your direct reports in the organization directory are individual contributors. None of your direct reports hold people management roles, and no team goal plans have been submitted for review yet.',
     'When your team members submit their goal boards for review, they will appear here for evaluation and signoff.'
   );
 }
@@ -100,8 +100,8 @@ function renderNoTeamBoardsEmptyView(): string {
   return renderEmptyReviewsCard(
     icons.folder,
     'Multi-Tier Leadership',
-    'No Team Flight Plans Submitted',
-    'Your team in the organization directory has not submitted any goal boards for your review yet. When team members publish flight plans, they will appear here.'
+    'No Team Goal Plans Submitted',
+    'Your team in the organization directory has not submitted any goal boards for your review yet. When team members publish goal plans, they will appear here.'
   );
 }
 
@@ -140,7 +140,7 @@ function renderSublistRowCard(b: GoalBoard): string {
   const isApproved = b.status === 'APPROVED';
 
   return `
-    <div class="team-board-row-card" data-status="${escapeHtml(b.status)}" data-title="${escapeHtml(b.title.toLowerCase())}" data-project="${escapeHtml((b.projectName || '').toLowerCase())}" style="--status-accent: ${indicatorColor};">
+    <div class="team-board-row-card" data-status="${escapeHtml(b.status)}" data-title="${escapeHtml(b.title.toLowerCase())}" style="--status-accent: ${indicatorColor};">
       <div class="board-card-body">
         <div class="board-card-title-line">
           <a href="?tab=board&id=${encodeURIComponent(b.id)}" onclick="navigateSpa('board', '${escapeHtml(b.id)}', event)" class="board-card-title">
@@ -151,8 +151,7 @@ function renderSublistRowCard(b: GoalBoard): string {
           </span>
         </div>
         <div class="board-card-meta-line">
-          <span class="board-chip">${icons.folder} ${escapeHtml(b.projectName || 'Project')}</span>
-          <span class="board-chip">${icons.calendar} ${escapeHtml(b.cycle)}</span>
+          <span class="board-chip">${icons.target} Milestone Blueprint</span>
           <span class="board-chip hide-mobile">Rev ${Number(b.revisionNumber) || 1}</span>
           <span class="board-chip hide-mobile">${icons.clock} ${new Date(b.updatedAt).toLocaleDateString()}</span>
         </div>
@@ -187,9 +186,9 @@ function renderSublistCard(b: GoalBoard): string {
   const isApproved = b.status === 'APPROVED';
 
   return `
-    <div class="team-board-card" data-status="${escapeHtml(b.status)}" data-title="${escapeHtml(b.title.toLowerCase())}" data-project="${escapeHtml((b.projectName || '').toLowerCase())}" style="background: var(--forge-bg-surface); border: 1px solid var(--forge-border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+    <div class="team-board-card" data-status="${escapeHtml(b.status)}" data-title="${escapeHtml(b.title.toLowerCase())}" style="background: var(--forge-bg-surface); border: 1px solid var(--forge-border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
-        <span style="font-size: 0.75rem; font-weight: 600; color: var(--forge-primary);">${escapeHtml(b.projectName || 'Project')}</span>
+        <span style="font-size: 0.75rem; font-weight: 600; color: var(--forge-primary);">${icons.target} Blueprint</span>
         <span style="font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 9999px; ${statusBadge.style}">
           ${statusBadge.label}
         </span>
@@ -200,7 +199,6 @@ function renderSublistCard(b: GoalBoard): string {
       </h4>
 
       <div style="font-size: 0.75rem; color: var(--forge-text-muted); display: flex; gap: 10px;">
-        <span>${icons.calendar} ${escapeHtml(b.cycle)}</span>
         <span>Rev ${Number(b.revisionNumber) || 1}</span>
         <span>${icons.clock} ${new Date(b.updatedAt).toLocaleDateString()}</span>
       </div>
@@ -251,7 +249,7 @@ function renderEmployeeAccordion(group: EmployeeGroup, index: number): string {
 
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
           <span class="emp-total-badge" style="font-size: 0.75rem; font-weight: 600; padding: 3px 9px; border-radius: 9999px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--forge-border); color: var(--forge-text-muted);">
-            ${group.boards.length} ${group.boards.length === 1 ? 'Flight Plan' : 'Flight Plans'}
+            ${group.boards.length} ${group.boards.length === 1 ? 'Goal Plan' : 'Goal Plans'}
           </span>
           ${group.pendingCount > 0 ? `
             <span style="font-size: 0.72rem; font-weight: 700; padding: 3px 9px; border-radius: 9999px; background: rgba(245, 158, 11, 0.12); color: var(--forge-warning); border: 1px solid rgba(245, 158, 11, 0.3);">
@@ -464,11 +462,10 @@ export function renderTeamReviewsSection(user: AuthUser, teamBoards: GoalBoard[]
             rowCards.forEach(r => {
               const rStatus = r.dataset.status || '';
               const rTitle = r.dataset.title || '';
-              const rProject = r.dataset.project || '';
               const statusMatch = currentStatusFilter === 'ALL' || 
                 (currentStatusFilter === 'SUBMITTED' && (rStatus === 'SUBMITTED' || rStatus === 'UNLOCK_REQUESTED' || rStatus === 'LOCKED_OVERDUE')) ||
                 rStatus === currentStatusFilter;
-              const textMatch = !query || empName.includes(query) || empDept.includes(query) || rTitle.includes(query) || rProject.includes(query);
+              const textMatch = !query || empName.includes(query) || empDept.includes(query) || rTitle.includes(query);
               const show = statusMatch && textMatch;
               r.style.display = show ? 'flex' : 'none';
               if (show) visibleReviewCount++;
@@ -477,11 +474,10 @@ export function renderTeamReviewsSection(user: AuthUser, teamBoards: GoalBoard[]
             gridCards.forEach(c => {
               const cStatus = c.dataset.status || '';
               const cTitle = c.dataset.title || '';
-              const cProject = c.dataset.project || '';
               const statusMatch = currentStatusFilter === 'ALL' || 
                 (currentStatusFilter === 'SUBMITTED' && (cStatus === 'SUBMITTED' || cStatus === 'UNLOCK_REQUESTED' || cStatus === 'LOCKED_OVERDUE')) ||
                 cStatus === currentStatusFilter;
-              const textMatch = !query || empName.includes(query) || empDept.includes(query) || cTitle.includes(query) || cProject.includes(query);
+              const textMatch = !query || empName.includes(query) || empDept.includes(query) || cTitle.includes(query);
               c.style.display = statusMatch && textMatch ? 'flex' : 'none';
             });
 

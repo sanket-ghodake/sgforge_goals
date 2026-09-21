@@ -145,7 +145,8 @@ export function resolveViewContent(tabParam: string, boardIdParam: string | null
 
   if (tabParam === 'board' && boardIdParam) {
     const board = getBoardById(boardIdParam, orgId);
-    contentHtml = renderBoardView(user, board);
+    const userBoards = allBoards.filter(b => b.ownerId === user.id || user.roles.includes('roles/admin') || user.roles.includes('roles/super_admin'));
+    contentHtml = renderBoardView(user, board, userBoards);
     activeTab = 'board';
   } else if (tabParam === 'boards') {
     contentHtml = renderBoardsView(user, allBoards, allProjects);

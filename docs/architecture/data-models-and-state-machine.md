@@ -11,7 +11,6 @@ The Individual Goal Center persists all relational state inside a dedicated Turs
 ```mermaid
 erDiagram
     USERS ||--o{ GOAL_BOARDS : "owns"
-    PROJECTS ||--o{ GOAL_BOARDS : "categorizes"
     GOAL_BOARDS ||--|{ GOAL_ITEMS : "contains"
     GOAL_BOARDS ||--o{ REVIEW_COMMENTS : "has audit trail"
     GOAL_BOARDS ||--o{ REMINDERS : "triggers"
@@ -43,13 +42,11 @@ erDiagram
     GOAL_BOARDS {
         TEXT id PK "Unique Goal Board ID (e.g. gb_123)"
         TEXT org_id "Tenant Organization ID"
-        TEXT project_id FK "References projects(id)"
         TEXT owner_id FK "References users(id)"
         TEXT owner_name "Owner full name"
         TEXT owner_email "Owner email"
         TEXT owner_department "Owner department"
         TEXT title "Goal Board Title"
-        TEXT cycle "Performance cycle (e.g. 2026-Q3)"
         TEXT status "Current lifecycle status"
         INTEGER lock_version "Optimistic concurrency version"
         INTEGER revision_number "Review cycle iteration counter"

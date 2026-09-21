@@ -1,7 +1,7 @@
 /**
  * Individual Goal Center - My Goal Boards View (Tab 2)
  * Enterprise 2026 LTS Component: Fuses shadcn UI, Magic UI, Aceternity, and Luxe.
- * Dedicated strictly to the authenticated user's own goal boards and personal flight plans.
+ * Dedicated strictly to the authenticated user's own goal boards and personal goal plans.
  * @requirements [HLR-UI-201] [LLR-SUB-001] [HLR-GOALS-001]
  */
 
@@ -15,10 +15,10 @@ function renderBoardCard(b: GoalBoard): string {
   const itemCount = Array.isArray(b.items) ? b.items.length : 0;
 
   return `
-    <div class="my-board-card" data-title="${escapeHtml(b.title.toLowerCase())}" data-project="${escapeHtml((b.projectName || '').toLowerCase())}" data-cycle="${escapeHtml(b.cycle.toLowerCase())}" data-status="${escapeHtml(b.status)}" style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; backdrop-filter: blur(12px); transition: border-color 0.2s ease, transform 0.2s ease;" onmouseover="this.style.borderColor='var(--forge-border-medium)'" onmouseout="this.style.borderColor='var(--forge-border)'">
+    <div class="my-board-card" data-title="${escapeHtml(b.title.toLowerCase())}" data-status="${escapeHtml(b.status)}" style="background: var(--forge-bg-card); border: 1px solid var(--forge-border); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; backdrop-filter: blur(12px); transition: border-color 0.2s ease, transform 0.2s ease;" onmouseover="this.style.borderColor='var(--forge-border-medium)'" onmouseout="this.style.borderColor='var(--forge-border)'">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; gap: 8px;">
         <span style="font-size: 0.75rem; font-weight: 600; color: var(--forge-primary); display: inline-flex; align-items: center; gap: 6px;">
-          ${icons.folder} ${escapeHtml(b.projectName || 'Assigned Project')}
+          ${icons.target} Milestone Blueprint
         </span>
         <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; font-weight: 600; padding: 3px 9px; border-radius: 9999px; ${statusBadge.style}">
           ${lockIcon} ${statusBadge.label}
@@ -32,7 +32,6 @@ function renderBoardCard(b: GoalBoard): string {
       </h3>
 
       <div style="font-size: 0.8rem; color: var(--forge-text-muted); margin-bottom: 18px; display: flex; gap: 12px; flex-wrap: wrap;">
-        <span style="display: inline-flex; align-items: center; gap: 4px;">${icons.calendar} ${escapeHtml(b.cycle)}</span>
         <span style="display: inline-flex; align-items: center; gap: 4px;">${icons.layers} Rev ${Number(b.revisionNumber) || 1}</span>
         ${itemCount > 0 ? `<span style="display: inline-flex; align-items: center; gap: 4px;">${icons.target} ${itemCount} Milestones</span>` : ''}
         ${b.submissionDeadline ? `
@@ -40,6 +39,7 @@ function renderBoardCard(b: GoalBoard): string {
             ${icons.clock} Due ${escapeHtml(b.submissionDeadline)}
           </span>
         ` : ''}
+        <span style="display: inline-flex; align-items: center; gap: 4px;">${icons.clock} ${new Date(b.updatedAt).toLocaleDateString()}</span>
       </div>
 
       <div style="margin-top: auto; padding-top: 14px; border-top: 1px solid var(--forge-border); display: flex; justify-content: space-between; align-items: center; gap: 8px;">
@@ -59,22 +59,16 @@ function renderBoardRow(b: GoalBoard): string {
   const itemCount = Array.isArray(b.items) ? b.items.length : 0;
 
   return `
-    <tr class="my-board-row" data-title="${escapeHtml(b.title.toLowerCase())}" data-project="${escapeHtml((b.projectName || '').toLowerCase())}" data-cycle="${escapeHtml(b.cycle.toLowerCase())}" data-status="${escapeHtml(b.status)}" style="border-bottom: 1px solid var(--forge-border); transition: background-color 0.15s ease;">
+    <tr class="my-board-row" data-title="${escapeHtml(b.title.toLowerCase())}" data-status="${escapeHtml(b.status)}" style="border-bottom: 1px solid var(--forge-border); transition: background-color 0.15s ease;">
       <td style="padding: 14px 18px; vertical-align: middle;">
-        <div style="display: flex; flex-direction: column; gap: 3px;">
-          <a href="?tab=board&id=${encodeURIComponent(b.id)}" onclick="navigateSpa('board', '${escapeHtml(b.id)}', event)" style="color: var(--forge-text-main); font-weight: 700; font-size: 0.92rem; text-decoration: none;" onmouseover="this.style.color='var(--forge-primary)'" onmouseout="this.style.color='var(--forge-text-main)'">
-            ${escapeHtml(b.title)}
-          </a>
-          <span style="font-size: 0.75rem; color: var(--forge-text-muted); display: inline-flex; align-items: center; gap: 4px;">
-            ${icons.folder} ${escapeHtml(b.projectName || 'Assigned Project')}
-          </span>
-        </div>
+        <a href="?tab=board&id=${encodeURIComponent(b.id)}" onclick="navigateSpa('board', '${escapeHtml(b.id)}', event)" style="color: var(--forge-text-main); font-weight: 700; font-size: 0.92rem; text-decoration: none;" onmouseover="this.style.color='var(--forge-primary)'" onmouseout="this.style.color='var(--forge-text-main)'">
+          ${escapeHtml(b.title)}
+        </a>
       </td>
       <td style="padding: 14px 18px; vertical-align: middle; white-space: nowrap;">
-        <div style="display: flex; gap: 8px; align-items: center; font-size: 0.775rem; color: var(--forge-text-muted);">
-          <span>${icons.calendar} ${escapeHtml(b.cycle)}</span>
-          <span style="padding: 1px 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--forge-border); font-family: var(--font-mono); font-size: 0.7rem;">Rev ${Number(b.revisionNumber) || 1}</span>
-        </div>
+        <span style="padding: 2px 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--forge-border); font-family: var(--font-mono); font-size: 0.75rem; color: var(--forge-text-muted);">
+          Rev ${Number(b.revisionNumber) || 1}
+        </span>
       </td>
       <td style="padding: 14px 18px; vertical-align: middle; white-space: nowrap; font-size: 0.775rem; color: var(--forge-text-muted);">
         ${itemCount > 0 ? `${itemCount} Milestones` : 'Draft Stage'}
@@ -133,7 +127,7 @@ export function renderBoardsView(user: AuthUser, boards: GoalBoard[], projects: 
           <div style="display: flex; align-items: center; gap: 10px;">
             <span style="color: var(--forge-primary); display: flex;">${icons.infoCircle}</span>
             <div style="font-size: 0.825rem; color: var(--forge-text-muted);">
-              Apex Contributor Mode: Your flight plans are self-governed and do not require manager approval submission cycles.
+              Apex Contributor Mode: Your goal plans are self-governed and do not require manager approval submission cycles.
             </div>
           </div>
           <span style="font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700; padding: 2px 10px; border-radius: 9999px; background: rgba(99, 102, 241, 0.15); color: var(--forge-primary);">
@@ -146,7 +140,7 @@ export function renderBoardsView(user: AuthUser, boards: GoalBoard[], projects: 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px;">
         <div class="luxe-hud-card">
           <div class="luxe-metric-label">
-            <span>ACTIVE FLIGHT PLANS</span>
+            <span>ACTIVE GOAL PLANS</span>
             <span style="color: var(--forge-primary);">${icons.target}</span>
           </div>
           <div class="luxe-metric-val">${myBoards.length}</div>
@@ -225,7 +219,7 @@ export function renderBoardsView(user: AuthUser, boards: GoalBoard[], projects: 
           </div>
           <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 6px; color: var(--forge-text-main);">No Goal Boards Found</h3>
           <p style="color: var(--forge-text-muted); font-size: 0.875rem; max-width: 460px; margin: 0 auto 20px auto; line-height: 1.5;">
-            You have not created any flight plans for this cycle yet. Create your first goal board to track milestones, weights, and progress.
+            You have not created any goal plans for this cycle yet. Create your first goal board to track milestones, weights, and progress.
           </p>
           <button class="btn-action btn-primary" onclick="openNewBoardModal()">
             ${icons.plus} Create Goal Board
@@ -243,8 +237,8 @@ export function renderBoardsView(user: AuthUser, boards: GoalBoard[], projects: 
             <table style="width: 100%; border-collapse: collapse; text-align: left;">
               <thead>
                 <tr style="border-bottom: 1px solid var(--forge-border); font-size: 0.7rem; font-weight: 700; color: var(--forge-text-muted); letter-spacing: 0.05em; text-transform: uppercase;">
-                  <th style="padding: 12px 18px;">Goal Board & Project</th>
-                  <th style="padding: 12px 18px;">Cycle & Rev</th>
+                  <th style="padding: 12px 18px;">Goal Board Title</th>
+                  <th style="padding: 12px 18px;">Revision</th>
                   <th style="padding: 12px 18px;">Milestones</th>
                   <th style="padding: 12px 18px;">Status</th>
                   <th style="padding: 12px 18px;">Updated</th>
@@ -301,11 +295,9 @@ export function renderBoardsView(user: AuthUser, boards: GoalBoard[], projects: 
           const cards = document.querySelectorAll('.my-board-card');
           cards.forEach(card => {
             const title = card.dataset.title || '';
-            const proj = card.dataset.project || '';
-            const cycle = card.dataset.cycle || '';
             const status = card.dataset.status || '';
 
-            const matchesQuery = !query || title.includes(query) || proj.includes(query) || cycle.includes(query);
+            const matchesQuery = !query || title.includes(query);
             const matchesStatus = activeStatus === 'ALL' || 
               (activeStatus === 'SUBMITTED' && (status === 'SUBMITTED' || status === 'UNLOCK_REQUESTED' || status === 'LOCKED_OVERDUE')) ||
               status === activeStatus;
@@ -316,11 +308,9 @@ export function renderBoardsView(user: AuthUser, boards: GoalBoard[], projects: 
           const rows = document.querySelectorAll('.my-board-row');
           rows.forEach(row => {
             const title = row.dataset.title || '';
-            const proj = row.dataset.project || '';
-            const cycle = row.dataset.cycle || '';
             const status = row.dataset.status || '';
 
-            const matchesQuery = !query || title.includes(query) || proj.includes(query) || cycle.includes(query);
+            const matchesQuery = !query || title.includes(query);
             const matchesStatus = activeStatus === 'ALL' || 
               (activeStatus === 'SUBMITTED' && (status === 'SUBMITTED' || status === 'UNLOCK_REQUESTED' || status === 'LOCKED_OVERDUE')) ||
               status === activeStatus;

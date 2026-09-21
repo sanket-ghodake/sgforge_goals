@@ -116,7 +116,7 @@ describe('Tier 5 E2E: Headless User Journeys & Observability Invariants', () => 
           Cookie: `forge_session=${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({}), // Missing required projectId and title
+        body: JSON.stringify({}), // Missing required title
       });
       const problem = await res.json();
 
@@ -127,6 +127,104 @@ describe('Tier 5 E2E: Headless User Journeys & Observability Invariants', () => 
       expect(problem.code).toBe('VALIDATION_ERROR');
       expect(problem.traceId).toBeDefined();
       expect(res.headers.get('X-Trace-Id')).toBe(problem.traceId);
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  it('Arrange, Act, Assert: Journey 5 - Silent Auto-Renewal Engine seamlessly negotiates token renewal and replays in-flight request', async () => {
+    // Arrange: Start server
+    const server = startgoalsServer(0);
+    const baseUrl = `http://127.0.0.1:${server.port}`;
+    const validRefreshToken = 'rtr_e2e_playwright_test_token_889911';
+
+    // 1. Verify Client HTML bundles the single-flight mutex and silent renewal engine
+    const activeToken = createInternalServiceToken(['roles/manager', 'roles/employee'], 'usr-alice-eng');
+    const rootRes = await fetch(`${baseUrl}/?tab=boards`, {
+      headers: {
+        Cookie: `forge_session=${activeToken}`,
+        Accept: 'text/html',
+      },
+    });
+    const rootHtml = await rootRes.text();
+    expect(rootHtml).toContain('attemptSilentRefresh');
+    expect(rootHtml).toContain('refreshPromise');
+    expect(rootHtml).toContain('/api/auth/refresh');
+
+    try {
+      // 2. Act: Simulate expired token calling protected API
+      const expiredHeader = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+      const expiredPayload = Buffer.from(
+        JSON.stringify({
+          sub: 'usr-alice-eng',
+          roles: ['roles/manager', 'roles/employee'],
+          exp: Math.floor(Date.now() / 1000) - 120, // Expired 2 minutes ago
+        })
+      ).toString('base64url');
+      const expiredToken = `${expiredHeader}.${expiredPayload}.mock_expired_sig`;
+
+      // API call with expired token returns 401
+      const initialApiRes = await fetch(`${baseUrl}/api/boards`, {
+        headers: {
+          Cookie: `forge_session=${expiredToken}`,
+          Accept: 'application/json',
+        },
+      });
+      expect(initialApiRes.status).toBe(401);
+      const initialError = await initialApiRes.json();
+      expect(initialError.code).toBe('TOKEN_EXPIRED');
+
+      // 3. Act: Client Interceptor triggers silent refresh
+      const refreshRes = await fetch(`${baseUrl}/api/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          Cookie: `forge_session=${expiredToken}; forge_refresh_token=${validRefreshToken}`,
+          Accept: 'application/json',
+        },
+      });
+      expect(refreshRes.status).toBe(200);
+      const refreshData = await refreshRes.json();
+      expect(refreshData.status).toBe('SUCCESS');
+
+      // 4. Act & Assert: Transparent replay of original request with renewed cookie succeeds
+      const setCookies = refreshRes.headers.get('set-cookie') || '';
+      const sessionMatch = setCookies.match(/forge_session=([^;]+)/);
+      expect(sessionMatch).not.toBeNull();
+      const freshSessionCookie = sessionMatch![1];
+
+      const replayedRes = await fetch(`${baseUrl}/api/boards`, {
+        headers: {
+          Cookie: `forge_session=${freshSessionCookie}`,
+          Accept: 'application/json',
+        },
+      });
+      expect(replayedRes.status).toBe(200);
+      const boards = await replayedRes.json();
+      expect(Array.isArray(boards)).toBe(true);
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  it('Arrange, Act, Assert: Journey 6 - Hard Session Expiry on Revoked Root Session denies renewal and signals logout', async () => {
+    // Arrange
+    const server = startgoalsServer(0);
+    const baseUrl = `http://127.0.0.1:${server.port}`;
+
+    try {
+      // Act: Attempt refresh with revoked/expired root session
+      const refreshRes = await fetch(`${baseUrl}/api/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          Cookie: 'forge_refresh_token=revoked_session_family_7766',
+          Accept: 'application/json',
+        },
+      });
+
+      // Assert: Refresh fails, enforcing re-authentication
+      expect(refreshRes.status).toBe(401);
+      const errorData = await refreshRes.json();
+      expect(errorData.code).toBe('REFRESH_TOKEN_INVALID');
     } finally {
       server.stop(true);
     }

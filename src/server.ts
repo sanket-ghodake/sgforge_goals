@@ -20,9 +20,11 @@ import { getAstryxStyles } from './lib/ui';
 import { renderLeadershipRestrictedView, renderLoginView } from './frontend/views/login-view';
 import { listUsers } from './db';
 import { createBoard, createProjectRecord, getBoardById, listBoards, listProjects, submitBoard, updateGoalItems, updateItemProgress } from './backend/services/board-service';
+import { cloneBoard, deleteBoard, togglePlanCompletion, updateBoardNotes } from './backend/services/board-actions-service';
 import { approveBoard, addReviewComment, requestRework, requestBoardUnlock, unlockBoard, setSubmissionDeadline } from './backend/services/review-service';
 import { dismissReminder, listUserReminders } from './backend/services/reminder-service';
 import { getCachedManagerStatus, resolveViewContent, syncEmployeeProfile } from './server-helpers';
+import { handleSessionRefresh } from './lib/auth-refresh';
 
 const LOG_DIR = join(import.meta.dir, '..', 'logs');
 const DOCS_DIR = join(import.meta.dir, '..', 'docs');
@@ -140,6 +142,10 @@ export function startgoalsServer(portOverride?: number) {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
+      }
+
+      if (pathname.endsWith('/api/auth/refresh') && req.method === 'POST') {
+        return await handleSessionRefresh(req);
       }
 
       // 5. Zero-Trust Auth Guard (Identity & Session Signature Validation)
@@ -317,6 +323,33 @@ export function startgoalsServer(portOverride?: number) {
           } else {
             board = requestRework(boardId, user, body.comment, body.itemId);
           }
+          return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
+        }
+
+        // DELETE /api/boards/:id
+        if (boardId && !action && req.method === 'DELETE') {
+          const result = deleteBoard(boardId, orgId, user);
+          return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+        }
+
+        // PATCH /api/boards/:id/notes (Real-time autosave)
+        if (boardId && action === 'notes' && req.method === 'PATCH') {
+          const body = await req.json();
+          const board = updateBoardNotes(boardId, body.notes, user);
+          return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
+        }
+
+        // POST /api/boards/:id/clone (Duplicate board)
+        if (boardId && action === 'clone' && req.method === 'POST') {
+          const board = cloneBoard(boardId, user);
+          return new Response(JSON.stringify(board), { status: 201, headers: { 'Content-Type': 'application/json' } });
+        }
+
+        // PATCH /api/boards/:id/items/:itemId/toggle (Toggle plan completion)
+        if (boardId && action === 'items' && req.method === 'PATCH' && pathname.endsWith('/toggle')) {
+          const partsList = pathname.split('/');
+          const itemId = partsList[partsList.indexOf('items') + 1];
+          const board = togglePlanCompletion(boardId, itemId, user);
           return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
         }
 

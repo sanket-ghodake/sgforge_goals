@@ -333,10 +333,10 @@ export function getModernUiStyles(): string {
       z-index: 1000;
       max-height: 220px;
       overflow-y: auto;
-      background: rgba(18, 18, 22, 0.98);
+      background: var(--forge-bg-elevated);
       border: 1px solid var(--forge-border-medium);
       border-radius: 10px;
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       padding: 6px;
@@ -367,6 +367,38 @@ export function getModernUiStyles(): string {
     .modern-select-option.selected {
       background: rgba(99, 102, 241, 0.22);
       color: #a5b4fc;
+      font-weight: 600;
+    }
+
+    /* Light Theme Custom Dropdown Overrides */
+    [data-theme="light"] .modern-select-trigger {
+      background: #ffffff;
+      border-color: var(--forge-border-medium);
+      color: var(--forge-text-main);
+    }
+    [data-theme="light"] .modern-select-trigger:hover {
+      border-color: var(--forge-primary);
+      background: var(--forge-bg-card-hover);
+    }
+    [data-theme="light"] .modern-select-trigger.open {
+      border-color: var(--forge-primary);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
+    }
+    [data-theme="light"] .modern-select-menu {
+      background: #ffffff;
+      border-color: var(--forge-border-medium);
+      box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.12), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+    [data-theme="light"] .modern-select-option {
+      color: var(--forge-text-main);
+    }
+    [data-theme="light"] .modern-select-option:hover {
+      background: var(--forge-bg-card-hover);
+      color: var(--forge-primary);
+    }
+    [data-theme="light"] .modern-select-option.selected {
+      background: rgba(79, 70, 229, 0.10);
+      color: var(--forge-primary);
       font-weight: 600;
     }
 

@@ -43,17 +43,17 @@ export function seedDevSystemData(orgId: string = 'org_default'): void {
     // 3. Seed Goal Boards
     const boardStmt = goalsDb.prepare(`
       INSERT OR REPLACE INTO goal_boards (
-        id, org_id, project_id, owner_id, owner_name, owner_email, owner_department,
-        title, cycle, status, lock_version, revision_number, submission_deadline,
+        id, org_id, owner_id, owner_name, owner_email, owner_department,
+        title, status, lock_version, revision_number, submission_deadline,
         submitted_at, approved_at, approved_by, unlocked_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const boards = getDevBoards(orgId, now);
     for (const b of boards) {
       boardStmt.run(
-        b.id, b.orgId, b.projectId, b.ownerId, b.ownerName, b.ownerEmail, b.ownerDepartment,
-        b.title, b.cycle, b.status, b.lockVersion, b.revisionNumber, b.submissionDeadline,
+        b.id, b.orgId, b.ownerId, b.ownerName, b.ownerEmail, b.ownerDepartment,
+        b.title, b.status, b.lockVersion, b.revisionNumber, b.submissionDeadline,
         b.submittedAt, b.approvedAt, b.approvedBy, b.unlockedAt, now, now
       );
     }

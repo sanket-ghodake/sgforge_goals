@@ -9,67 +9,19 @@ import { escapeHtml, renderModernSelectHtml } from '../../lib/ui';
 import type { AuthUser, Reminder } from '../../lib/types';
 
 export function renderNewBoardModal(): string {
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
-  const currentCycle = `${currentYear}-Q${currentQuarter}`;
-  const nextQuarter = currentQuarter === 4 ? 1 : currentQuarter + 1;
-  const nextYear = currentQuarter === 4 ? currentYear + 1 : currentYear;
-  const nextCycle = `${nextYear}-Q${nextQuarter}`;
-
   return `
   <!-- New Board Modal -->
   <div class="modal-backdrop" id="newBoardModal" onclick="if(event.target === this) closeNewBoardModal()">
-    <div class="modal-box">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 style="font-size: 1.1rem; font-weight: 700;">Create Project Goal Board</h3>
-        <button class="btn-icon" onclick="closeNewBoardModal()">${icons.close}</button>
+    <div class="modal-box" style="max-width: 480px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+        <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--forge-text-main);">Create Goal Board</h3>
+        <button type="button" class="btn-icon" onclick="closeNewBoardModal()">${icons.close}</button>
       </div>
 
       <form id="newBoardForm" onsubmit="handleCreateBoard(event)">
-        <div style="margin-bottom: 14px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <label style="font-size: 0.8rem; font-weight: 600; color: var(--forge-text-muted);">Assigned Project</label>
-            <button type="button" onclick="toggleQuickProjectCreation()" style="background: none; border: none; color: var(--forge-primary); font-size: 0.75rem; cursor: pointer; padding: 0;">
-              + New Project
-            </button>
-          </div>
-          
-          ${renderModernSelectHtml({
-            id: 'boardProjectSelect',
-            name: 'projectId',
-            placeholder: 'Select an active project...',
-            options: []
-          })}
-
-          <!-- Inline Quick Project Creation Container -->
-          <div id="quickProjectContainer" style="display: none; margin-top: 8px; padding: 10px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border); border-radius: 8px;">
-            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-bottom: 6px;">
-              <input id="quickProjectName" type="text" placeholder="Project Name (e.g. Core Telemetry)" style="height: 32px; border-radius: 6px; background: var(--forge-bg-card); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 0 8px; font-size: 0.8rem;" />
-              <input id="quickProjectCode" type="text" placeholder="CODE" style="height: 32px; border-radius: 6px; background: var(--forge-bg-card); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 0 8px; font-size: 0.8rem; text-transform: uppercase;" />
-            </div>
-            <button type="button" onclick="handleQuickCreateProject()" class="btn-action btn-outline" style="height: 28px; font-size: 0.75rem; width: 100%;">
-              Save & Select Project
-            </button>
-          </div>
-        </div>
-
-        <div style="margin-bottom: 14px;">
-          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--forge-text-muted);">Board Title</label>
-          <input id="boardTitleInput" type="text" placeholder="e.g. Production Deployment & Reliability Verification" required style="width: 100%; height: 38px; border-radius: 7px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 0 12px; font-size: 0.875rem;" />
-        </div>
-
-        <div style="margin-bottom: 20px;">
-          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--forge-text-muted);">Evaluation Cycle</label>
-          ${renderModernSelectHtml({
-            id: 'boardCycleSelect',
-            name: 'cycle',
-            placeholder: 'Select evaluation cycle...',
-            options: [
-              { value: currentCycle, label: `${currentCycle} (Current Active)`, selected: true },
-              { value: nextCycle, label: `${nextCycle} (Upcoming)` }
-            ]
-          })}
+        <div style="margin-bottom: 22px;">
+          <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; color: var(--forge-text-main);">Board Title</label>
+          <input id="boardTitleInput" type="text" placeholder="e.g. Production Deployment & Reliability Verification" required autofocus style="width: 100%; height: 42px; border-radius: 8px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border-medium); color: var(--forge-text-main); padding: 0 14px; font-size: 0.9rem; outline: none; transition: border-color 0.15s ease;" onfocus="this.style.borderColor='var(--forge-primary)'" onblur="this.style.borderColor='var(--forge-border-medium)'" />
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: 10px;">

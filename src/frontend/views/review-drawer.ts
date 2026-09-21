@@ -125,7 +125,7 @@ export function getReviewDrawerScript(): string {
       \`;
     }
 
-    function renderDrawerShell(board, preselectItemId) {
+    function renderDrawerShell(board) {
       const drawerPane = document.getElementById('reviewDrawerPane');
       if (!drawerPane) return;
 
@@ -139,14 +139,6 @@ export function getReviewDrawerScript(): string {
       const peerInitial = (peerName || 'M').charAt(0).toUpperCase();
       const peerBg = isOwner ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'linear-gradient(135deg, #10b981, #059669)';
       const { label, color } = getStatusBadge(board);
-
-      const activeItem = preselectItemId || window._activeReviewItemId || '';
-      let activeItemLabel = 'Whole Board';
-      const itemOptionsHtml = (board.items || []).map(function(item) {
-        const isSel = item.id === activeItem;
-        if (isSel) activeItemLabel = item.title;
-        return '<div class="modern-select-option ' + (isSel ? 'selected' : '') + '" data-value="' + escapeHtml(item.id) + '" onclick="window.selectModernOption && window.selectModernOption(\\'drawerCommentItemSelect\\', \\'' + escapeHtml(item.id) + '\\', \\'' + escapeHtml(item.title).replace(/'/g, "\\\\'") + '\\'); window._activeReviewItemId = \\'' + escapeHtml(item.id) + '\\';">' + escapeHtml(item.title) + '</div>';
-      }).join('');
 
       drawerPane.innerHTML = \`
         <div class="drawer-header">
@@ -183,17 +175,6 @@ export function getReviewDrawerScript(): string {
             \${getActionButtonsHtml(board, currentUser)}
           </div>
           <div style="display:flex; gap:6px; align-items:center;">
-            <div class="modern-select-wrap" id="drawerCommentItemSelect" style="max-width:130px; min-width:85px;">
-              <button type="button" class="modern-select-trigger" onclick="window.toggleModernSelect && window.toggleModernSelect('drawerCommentItemSelect')" style="height:34px; font-size:0.75rem; padding:0 6px;">
-                <span class="modern-select-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${escapeHtml(activeItemLabel)}</span>
-                <span class="modern-select-arrow">${icons.chevronDown}</span>
-              </button>
-              <div class="modern-select-menu">
-                <div class="modern-select-option \${!activeItem ? 'selected' : ''}" data-value="" onclick="window.selectModernOption && window.selectModernOption('drawerCommentItemSelect', '', 'Whole Board'); window._activeReviewItemId = '';">Whole Board</div>
-                \${itemOptionsHtml}
-              </div>
-              <input type="hidden" id="drawerCommentItemSelect_input" value="\${escapeHtml(activeItem)}" />
-            </div>
             <input id="drawerCommentInput" type="text" placeholder="Message \${escapeHtml(peerName)}..." style="flex:1; min-width:0; height:34px; border-radius:8px; background:var(--forge-bg-card); border:1px solid var(--forge-border); color:var(--forge-text-main); padding:0 10px; font-size:0.8rem;" onkeydown="if(event.key==='Enter') submitDrawerComment('\${escapeHtml(board.id)}')" />
             <button class="btn-action btn-primary" style="height:34px; padding:0 12px; font-size:0.78rem; flex-shrink:0;" onclick="submitDrawerComment('\${escapeHtml(board.id)}')">
               ${icons.send} <span>Send</span>
@@ -244,7 +225,7 @@ export function getReviewDrawerScript(): string {
 
       if (!window._renderedCommentIds.has('sys_created')) {
         newHtml += checkDateDivider(board.createdAt);
-        newHtml += \`<div class="chat-bubble chat-bubble-system">Goal Board Created for \${escapeHtml(board.projectName || 'Project')} (\${escapeHtml(board.cycle)})</div>\`;
+        newHtml += \`<div class="chat-bubble chat-bubble-system">Goal Board Created: \${escapeHtml(board.title)}</div>\`;
         window._renderedCommentIds.add('sys_created');
       }
 
@@ -293,7 +274,7 @@ export function getReviewDrawerScript(): string {
       }
     }
 
-    function fetchBoardAndSync(boardId, preselectItemId, isPolling) {
+    function fetchBoardAndSync(boardId, isPolling) {
       fetch('api/boards/' + encodeURIComponent(boardId))
         .then(function(res) {
           if (!res.ok) throw new Error('Board not found');
@@ -301,7 +282,7 @@ export function getReviewDrawerScript(): string {
         })
         .then(function(board) {
           if (window._renderedBoardId !== board.id) {
-            renderDrawerShell(board, preselectItemId);
+            renderDrawerShell(board);
           }
           updateDrawerMessages(board, isPolling);
         })
@@ -313,13 +294,12 @@ export function getReviewDrawerScript(): string {
         });
     }
 
-    window.openReviewDrawer = function(boardId, preselectItemId) {
+    window.openReviewDrawer = function(boardId) {
       const drawerBackdrop = document.getElementById('reviewTimelineDrawer');
       const drawerPane = document.getElementById('reviewDrawerPane');
       if (!drawerBackdrop || !drawerPane) return;
 
       window._activeReviewBoardId = boardId;
-      if (preselectItemId) window._activeReviewItemId = preselectItemId;
 
       drawerBackdrop.classList.add('open');
 
@@ -327,7 +307,7 @@ export function getReviewDrawerScript(): string {
         drawerPane.innerHTML = '<div style="padding:40px; text-align:center; color:var(--forge-text-muted);">Loading review timeline...</div>';
       }
 
-      fetchBoardAndSync(boardId, preselectItemId, false);
+      fetchBoardAndSync(boardId, false);
 
       if (window._reviewPollInterval) clearInterval(window._reviewPollInterval);
       window._reviewPollInterval = setInterval(function() {
@@ -335,7 +315,7 @@ export function getReviewDrawerScript(): string {
           clearInterval(window._reviewPollInterval);
           return;
         }
-        fetchBoardAndSync(boardId, window._activeReviewItemId, true);
+        fetchBoardAndSync(boardId, true);
       }, 4000);
     };
 
@@ -347,23 +327,20 @@ export function getReviewDrawerScript(): string {
         window._reviewPollInterval = null;
       }
       window._activeReviewBoardId = null;
-      window._activeReviewItemId = null;
     };
 
     window.submitDrawerComment = function(boardId) {
       const input = document.getElementById('drawerCommentInput');
-      const select = document.getElementById('drawerCommentItemSelect');
       if (!input || !input.value.trim()) return;
 
       const text = input.value.trim();
-      const itemId = select ? select.value : '';
       input.value = '';
       input.focus();
 
       fetch('api/boards/' + boardId + '/comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commentText: text, itemId: itemId || undefined })
+        body: JSON.stringify({ commentText: text })
       })
       .then(function(res) {
         if (!res.ok) throw new Error('Failed to post comment');
@@ -454,7 +431,7 @@ export function getReviewDrawerScript(): string {
 
       if (window.showModernConfirm) {
         window.showModernConfirm({
-          title: 'Approve & Seal Flight Plan',
+          title: 'Approve & Seal Goal Plan',
           message: 'Are you sure you want to approve and seal this goal board? Once approved, the milestones become an immutable operational blueprint.',
           confirmText: 'Approve & Seal',
           confirmVariant: 'success',

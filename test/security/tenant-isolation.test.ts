@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { createBoard, createProjectRecord, getBoardById, updateGoalItems } from '../../src/backend/services/board-service';
+import { createBoard, getBoardById, updateGoalItems } from '../../src/backend/services/board-service';
 import { addReviewComment } from '../../src/backend/services/review-service';
 import type { AuthUser } from '../../src/lib/types';
 
@@ -34,20 +34,10 @@ describe('Tier 3 Security: Multi-Tenant & RBAC Isolation Invariants', () => {
     orgId: 'org_alpha',
   };
 
-  const alphaProject = createProjectRecord({
-    name: 'Alpha Project',
-    code: 'ALPHA',
-    description: 'Dynamic project for tenant isolation testing',
-    managerId: 'usr_alpha_lead',
-    orgId: 'org_alpha',
-  });
-
   it('Arrange, Act, Assert: prevents cross-tenant access between different organizations', () => {
     // Arrange: User in Org Alpha creates a board
     const alphaBoard = createBoard({
-      projectId: alphaProject.id,
       title: 'Confidential Alpha Strategy',
-      cycle: '2026-Q1',
     }, userOrgAlpha);
 
     // Act & Assert: User in Org Beta attempts to access Alpha board
@@ -57,9 +47,7 @@ describe('Tier 3 Security: Multi-Tenant & RBAC Isolation Invariants', () => {
   it('Arrange, Act, Assert: blocks unauthorized colleague from modifying another employee draft board', () => {
     // Arrange: Alpha Employee owns the board
     const alphaBoard = createBoard({
-      projectId: alphaProject.id,
       title: 'Alpha Private Milestones',
-      cycle: '2026-Q1',
     }, userOrgAlpha);
 
     // Act & Assert: Intruder in same org tries to overwrite Alpha's goals
@@ -79,9 +67,7 @@ describe('Tier 3 Security: Multi-Tenant & RBAC Isolation Invariants', () => {
   it('Arrange, Act, Assert: restricts review timeline comments access to board owner and manager', () => {
     // Arrange: Alpha Employee owns board
     const alphaBoard = createBoard({
-      projectId: alphaProject.id,
       title: 'Confidential Review Board',
-      cycle: '2026-Q1',
     }, userOrgAlpha);
 
     // Act: Malicious Colleague (not owner, not manager) tries to fetch board

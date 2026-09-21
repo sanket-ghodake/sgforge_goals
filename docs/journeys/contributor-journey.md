@@ -26,8 +26,7 @@ sequenceDiagram
     participant DB as Dedicated Turso DB (data/goals.db)
     actor Manager as Direct Manager (Reviewer)
 
-    Note over Contributor,UI: Phase 1: Formulation & Project Linkage
-    Contributor->>UI: Selects Active Cycle (e.g. 2026-Q3) & Project Code
+    Note over Contributor,UI: Phase 1: Board Formulation
     Contributor->>UI: Enters Title: "Core Reliability & libSQL Migration"
     UI->>Server: POST /api/boards
     Server->>BoardSvc: createBoard(payload, user)
@@ -88,7 +87,7 @@ sequenceDiagram
 
 ### Step 2: Goal Formulation & Mathematical Weight Validation
 1. From the Dashboard, the contributor clicks **Create Goal Board**.
-2. Selects an organizational project from `GET /api/projects`. If no project matches, a new project can be registered via `POST /api/projects`.
+2. Enters Board Title in the creation modal (only title is required).
 3. Defines milestones with:
    - Title & Detailed Description.
     - Category (`DELIVERABLE`, `METRIC`, `LEARNING`).

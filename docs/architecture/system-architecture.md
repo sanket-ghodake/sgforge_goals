@@ -22,6 +22,7 @@ graph TD
 
     subgraph Layer2 ["2. HTTP Dispatcher & Middleware Layer (src/server.ts)"]
         Server["Bun HTTP Engine (Bun.serve)"]
+        RefreshGateway["Session Auto-Renewal Gateway (auth-refresh.ts)"]
         AuthMiddleware["Zero-Trust Auth Guard (authGuard)"]
         ClearanceMiddleware["Leadership Clearance Guard (checkEmployeeIsManager)"]
         SafeHandler["RFC 7807 Problem Details Handler (createSafeHandler)"]
@@ -47,6 +48,8 @@ graph TD
     end
 
     SPA --> Server
+    Server --> RefreshGateway
+    RefreshGateway -.->|"Silent Renewal"| CentralPlatform
     Server --> AuthMiddleware
     AuthMiddleware --> ClearanceMiddleware
     ClearanceMiddleware --> BoardService
@@ -60,6 +63,8 @@ graph TD
     ClearanceMiddleware -.-> DirClient
     DirClient -.-> CentralPlatform
 ```
+
+> 📖 **Deep Dive**: For comprehensive details on silent token auto-renewal, single-flight mutex request replay, and multi-tab synchronization, see the [Session Lifecycle & Silent Auto-Refresh Architecture](file:///home/sanket/Desktop/Sanket/forge-app/goals/docs/architecture/session-lifecycle-and-renewal.md).
 
 ---
 
