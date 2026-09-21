@@ -345,4 +345,76 @@ describe('Tier 2 Integration: Goal Center REST API Dispatcher', () => {
       server.stop(true);
     }
   });
+
+  it('Arrange, Act, Assert: patches item priority and title via PATCH api/boards/:id/items/:itemId', async () => {
+    const server = startgoalsServer(0);
+    const token = createInternalServiceToken(['roles/manager'], 'usr_integ_patch_item');
+    const baseUrl = `http://localhost:${server.port}`;
+
+    try {
+      // 1. Create a draft board
+      const createBoardRes = await fetch(`${baseUrl}/api/boards`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cookie': `forge_session=${token}` },
+        body: JSON.stringify({ title: 'Item Patch Test Board' }),
+      });
+      const board = await createBoardRes.json();
+      expect(createBoardRes.status).toBe(201);
+
+      // 2. Put an initial item
+      const putRes = await fetch(`${baseUrl}/api/boards/${board.id}/items`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Cookie': `forge_session=${token}` },
+        body: JSON.stringify({
+          items: [{
+            title: 'Initial Skill Name',
+            description: 'Core skill',
+            category: 'CORE_SKILL',
+            targetDate: '2026-03-31',
+            weight: 100,
+            progressPercent: 0,
+            status: 'PENDING',
+            priority: 'MEDIUM',
+          }],
+        }),
+      });
+      const updatedBoard = await putRes.json();
+      expect(putRes.status).toBe(200);
+      const itemId = updatedBoard.items[0].id;
+      expect(itemId).toBeDefined();
+
+      // 3. Patch priority to CRITICAL
+      const patchPrioRes = await fetch(`${baseUrl}/api/boards/${board.id}/items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Cookie': `forge_session=${token}` },
+        body: JSON.stringify({ priority: 'CRITICAL' }),
+      });
+      const prioBoard = await patchPrioRes.json();
+      expect(patchPrioRes.status).toBe(200);
+      expect(prioBoard.items.find((i: any) => i.id === itemId).priority).toBe('CRITICAL');
+
+      // 4. Patch title to modified text
+      const patchTitleRes = await fetch(`${baseUrl}/api/boards/${board.id}/items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Cookie': `forge_session=${token}` },
+        body: JSON.stringify({ title: 'Advanced Fastify Framework' }),
+      });
+      const titleBoard = await patchTitleRes.json();
+      expect(patchTitleRes.status).toBe(200);
+      expect(titleBoard.items.find((i: any) => i.id === itemId).title).toBe('Advanced Fastify Framework');
+
+      // 5. Patch priority to LOW
+      const patchLowRes = await fetch(`${baseUrl}/api/boards/${board.id}/items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Cookie': `forge_session=${token}` },
+        body: JSON.stringify({ priority: 'LOW' }),
+      });
+      const lowBoard = await patchLowRes.json();
+      expect(patchLowRes.status).toBe(200);
+      expect(lowBoard.items.find((i: any) => i.id === itemId).priority).toBe('LOW');
+    } finally {
+      server.stop(true);
+    }
+  });
 });
+

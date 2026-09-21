@@ -50,13 +50,15 @@ export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects:
         </div>
 
         <!-- Segmented Navigation Pill Switcher -->
-        <div class="segmented-nav">
-          <button class="segmented-nav-btn active" id="btnTabMyReviews" onclick="switchReviewsTab('my-reviews')">
-            ${icons.user} My Submissions (${myBoards.length})
+        <div class="segmented-nav" role="tablist" aria-label="Reviews Navigation">
+          <button class="segmented-nav-btn active" id="btnTabMyReviews" onclick="switchReviewsTab('my-reviews')" role="tab" aria-selected="true">
+            ${icons.user} <span>My Submissions</span>
+            <span class="filter-badge">${myBoards.length}</span>
           </button>
-          <button class="segmented-nav-btn" id="btnTabTeamReviews" onclick="switchReviewsTab('team-reviews')">
-            ${icons.users} Team Reviews (${teamBoards.length})
-            ${teamPendingCount > 0 ? `<span style="background: var(--forge-warning); color: #000; font-size: 0.68rem; padding: 1px 6px; border-radius: 9999px; font-weight: 700;">${teamPendingCount}</span>` : ''}
+          <button class="segmented-nav-btn" id="btnTabTeamReviews" onclick="switchReviewsTab('team-reviews')" role="tab" aria-selected="false">
+            ${icons.users} <span>Team Reviews</span>
+            <span class="filter-badge">${teamBoards.length}</span>
+            ${teamPendingCount > 0 ? `<span class="filter-badge has-pending">${teamPendingCount}</span>` : ''}
           </button>
         </div>
       </div>
@@ -226,13 +228,13 @@ export function renderManagerView(user: AuthUser, boards: GoalBoard[], projects:
         if (tab === 'team-reviews') {
           if (myC) myC.style.display = 'none';
           if (teamC) teamC.style.display = 'block';
-          if (btnMy) btnMy.classList.remove('active');
-          if (btnTeam) btnTeam.classList.add('active');
+          if (btnMy) { btnMy.classList.remove('active'); btnMy.setAttribute('aria-selected', 'false'); }
+          if (btnTeam) { btnTeam.classList.add('active'); btnTeam.setAttribute('aria-selected', 'true'); }
         } else {
           if (myC) myC.style.display = 'block';
           if (teamC) teamC.style.display = 'none';
-          if (btnMy) btnMy.classList.add('active');
-          if (btnTeam) btnTeam.classList.remove('active');
+          if (btnMy) { btnMy.classList.add('active'); btnMy.setAttribute('aria-selected', 'true'); }
+          if (btnTeam) { btnTeam.classList.remove('active'); btnTeam.setAttribute('aria-selected', 'false'); }
         }
       };
     </script>

@@ -28,7 +28,7 @@ export function getReviewDrawerScript(): string {
       const isOverdue = board.status === 'LOCKED_OVERDUE';
       const isUnlockReq = board.status === 'UNLOCK_REQUESTED';
       const label = isApproved ? 'Approved & Sealed' : isSubmitted ? 'Under Review' : isRework ? 'Revisions Requested' : isOverdue ? 'Auto-Locked (Overdue)' : isUnlockReq ? 'Unlock Requested' : 'Draft';
-      const color = isApproved ? 'var(--forge-success)' : isSubmitted ? 'var(--forge-warning)' : isRework ? 'var(--forge-error)' : 'var(--forge-text-muted)';
+      const color = isApproved ? 'var(--forge-success)' : isSubmitted ? 'var(--forge-warning)' : isRework ? 'var(--forge-error)' : 'var(--forge-text-subtle)';
       return { label, color, isApproved, isSubmitted, isRework, isOverdue, isUnlockReq };
     }
 
@@ -49,19 +49,20 @@ export function getReviewDrawerScript(): string {
 
       if (isReviewer) {
         if (isSubmitted || isRework || isOverdue || isUnlockReq) {
-          return \`<button class="btn-action btn-outline" style="font-size:0.75rem; color:var(--forge-warning); border-color:rgba(245,158,11,0.3);" onclick="openReworkModal('\${escapeHtml(board.id)}', '\${safeTitle}')">${icons.alertCircle} Request Rework</button><button class="btn-action btn-primary" style="font-size:0.75rem;" onclick="handleApproveBoard('\${escapeHtml(board.id)}')">${icons.award} Approve Board</button>\`;
+          return \`<button class="drawer-action-btn drawer-action-btn-neutral" onclick="openReworkModal('\${escapeHtml(board.id)}', '\${safeTitle}')">${icons.alertCircle} Request Rework</button><button class="drawer-action-btn drawer-action-btn-primary" onclick="handleApproveBoard('\${escapeHtml(board.id)}')">${icons.award} Approve Board</button>\`;
         }
         if (isApproved) {
-          return \`<button class="btn-action btn-outline" style="font-size:0.75rem; color:var(--forge-warning); border-color:rgba(245,158,11,0.3);" onclick="openReworkModal('\${escapeHtml(board.id)}', '\${safeTitle}')">${icons.alertCircle} Move to Rework</button><button class="btn-action btn-outline" style="font-size:0.75rem;" onclick="handleUnlockBoard('\${escapeHtml(board.id)}')">${icons.lock} Unlock Board</button>\`;
+          return \`<button class="drawer-action-btn drawer-action-btn-neutral" onclick="openReworkModal('\${escapeHtml(board.id)}', '\${safeTitle}')">${icons.alertCircle} Move to Rework</button><button class="drawer-action-btn drawer-action-btn-neutral" onclick="handleUnlockBoard('\${escapeHtml(board.id)}')">${icons.lock} Unlock Board</button>\`;
         }
       } else if (isOwner) {
-        if (isSubmitted || isOverdue || isApproved) {
-          const badgeSvg = isApproved ? '${icons.award}' : '${icons.lock}';
-          const lockBtn = (isSubmitted || isOverdue) ? \`<button class="btn-action btn-outline" style="font-size:0.75rem; color:var(--forge-warning); border-color:rgba(245,158,11,0.3);" onclick="handleRequestUnlock('\${escapeHtml(board.id)}')">${icons.lock} Request Unlock</button>\` : '';
-          return \`<span style="font-size:0.75rem; color:\${color}; display:inline-flex; align-items:center; gap:6px; font-weight:600;">\${badgeSvg} \${label}</span>\${lockBtn}\`;
+        if (isSubmitted || isOverdue) {
+          return \`<button class="drawer-action-btn drawer-action-btn-neutral" onclick="handleRequestUnlock('\${escapeHtml(board.id)}')">${icons.lock} Request Unlock</button>\`;
+        }
+        if (isApproved) {
+          return \`<span class="drawer-action-status-label">${icons.award} Approved</span>\`;
         }
         if (isRework) {
-          return \`<a href="?tab=board&id=\${encodeURIComponent(board.id)}" onclick="closeReviewDrawer(); navigateSpa('board', '\${escapeHtml(board.id)}', event)" class="btn-action btn-primary" style="font-size:0.75rem;">${icons.edit} Edit & Resubmit</a>\`;
+          return \`<a href="?tab=board&id=\${encodeURIComponent(board.id)}" onclick="closeReviewDrawer(); navigateSpa('board', '\${escapeHtml(board.id)}', event)" class="drawer-action-btn drawer-action-btn-primary">${icons.edit} Edit & Resubmit</a>\`;
         }
       }
       return '';
@@ -75,52 +76,50 @@ export function getReviewDrawerScript(): string {
 
       const isMe = Boolean(
         (currentUser.id && c.authorId === currentUser.id) ||
-        (currentUser.displayName && c.authorName && currentUser.displayName.toLowerCase() === c.authorName.toLowerCase())
+        (!c.authorId && currentUser.email && c.authorEmail && currentUser.email.toLowerCase() === c.authorEmail.toLowerCase())
+      );
+      const isReviewerComment = !isMe && Boolean(
+        c.authorRole && /manager|admin|reviewer/i.test(c.authorRole)
       );
 
       if (isSystem) {
-        return \`<div class="chat-bubble chat-bubble-system" data-cid="\${escapeHtml(c.id)}">\${escapeHtml(c.commentText)} &bull; \${escapeHtml(msgTime)}</div>\`;
+        return \`<div class="timeline-event-card" data-cid="\${escapeHtml(c.id)}"><span>\${escapeHtml(c.commentText)}</span> &bull; <span class="timeline-card-time">\${escapeHtml(msgTime)}</span></div>\`;
       }
       if (isApprovalMsg) {
         return \`
-          <div class="chat-bubble chat-bubble-approved" data-cid="\${escapeHtml(c.id)}">
-            <div style="font-size:0.95rem; font-weight:700; margin-bottom:4px;">Formally Sealed & Approved</div>
-            <div style="font-size:0.85rem; color:var(--forge-text-main); margin-bottom:6px;">\${escapeHtml(c.commentText)}</div>
-            <div class="chat-timestamp">Approved by \${escapeHtml(c.authorName)} &bull; \${escapeHtml(msgTime)}</div>
+          <div class="timeline-card timeline-card-approved" data-cid="\${escapeHtml(c.id)}">
+            <div style="display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700; font-size:0.875rem; color:var(--forge-success); margin-bottom:2px;">${icons.award} Formally Sealed & Approved</div>
+            <div class="timeline-card-body" style="text-align:center; font-weight:500;">\${escapeHtml(c.commentText)}</div>
+            <div class="timeline-card-time" style="margin-top:2px;">Approved by \${escapeHtml(c.authorName)} &bull; \${escapeHtml(msgTime)}</div>
           </div>
         \`;
       }
       if (isReworkMsg) {
-        const reworkClass = isMe ? 'chat-bubble-rework-me' : 'chat-bubble-rework';
+        const reworkSide = isMe ? 'timeline-card-me' : 'timeline-card-other';
         return \`
-          <div class="chat-bubble \${reworkClass}" data-cid="\${escapeHtml(c.id)}">
-            \${!isMe ? \`<div class="chat-author" style="color:var(--forge-warning);"><span>\${escapeHtml(c.authorName)} (\${escapeHtml(c.authorRole)})</span></div>\` : ''}
-            <div style="font-weight:700; margin-bottom:4px; color:var(--forge-warning);">Revision Requested</div>
-            <div>\${escapeHtml(c.commentText)}</div>
-            <div class="chat-msg-footer"><span>\${escapeHtml(msgTime)}</span>\${isMe ? '<span class="chat-check">✓✓</span>' : ''}</div>
+          <div class="timeline-card \${reworkSide} timeline-card-rework" data-cid="\${escapeHtml(c.id)}">
+            <div class="timeline-card-header">
+              <span class="timeline-card-author">\${escapeHtml(c.authorName)}</span>
+              <span class="timeline-card-time">\${escapeHtml(msgTime)}</span>
+            </div>
+            <div style="font-size:0.75rem; font-weight:700; color:var(--forge-warning); display:flex; align-items:center; gap:5px;">${icons.alertCircle} Revision Requested</div>
+            <div class="timeline-card-body">\${escapeHtml(c.commentText)}</div>
           </div>
         \`;
       }
-      if (c.type === 'UNLOCK_REQUEST') {
-        const unlockClass = isMe ? 'chat-bubble-me' : 'chat-bubble-other';
-        return \`
-          <div class="chat-bubble \${unlockClass}" data-cid="\${escapeHtml(c.id)}" style="border-color:rgba(245,158,11,0.4);">
-            \${!isMe ? \`<div class="chat-author" style="color:var(--forge-warning);"><span>\${escapeHtml(c.authorName)}</span></div>\` : ''}
-            <div>\${escapeHtml(c.commentText)}</div>
-            <div class="chat-msg-footer"><span>\${escapeHtml(msgTime)}</span>\${isMe ? '<span class="chat-check">✓✓</span>' : ''}</div>
-          </div>
-        \`;
-      }
-      const bubbleClass = isMe ? 'chat-bubble-me' : 'chat-bubble-other';
+
+      const cardSide = isMe ? 'timeline-card-me' : 'timeline-card-other';
       const matchedItem = c.itemId && board.items ? board.items.find(function(i) { return i.id === c.itemId; }) : null;
-      const itemBadgeHtml = matchedItem ? \`<div class="chat-milestone-tag"><span>Milestone:</span> <strong>\${escapeHtml(matchedItem.title)}</strong></div>\` : '';
+      const itemBadgeHtml = matchedItem ? \`<div class="timeline-milestone-badge">${icons.target} <span>Milestone:</span> <strong>\${escapeHtml(matchedItem.title)}</strong></div>\` : '';
 
       return \`
-        <div class="chat-bubble \${bubbleClass}" data-cid="\${escapeHtml(c.id)}">
-          \${!isMe ? \`<div class="chat-author"><span>\${escapeHtml(c.authorName)} (\${escapeHtml(c.authorRole)})</span></div>\` : ''}
+        <div class="timeline-card \${cardSide} \${isReviewerComment ? 'timeline-card-reviewer' : ''}" data-cid="\${escapeHtml(c.id)}">
+          <div class="timeline-card-header">
+            <span class="timeline-card-author">\${escapeHtml(c.authorName || 'User')}</span>
+            <span class="timeline-card-time">\${escapeHtml(msgTime)}</span>
+          </div>
           \${itemBadgeHtml}
-          <div>\${escapeHtml(c.commentText)}</div>
-          <div class="chat-msg-footer"><span>\${escapeHtml(msgTime)}</span>\${isMe ? '<span class="chat-check">✓✓</span>' : ''}</div>
+          <div class="timeline-card-body">\${escapeHtml(c.commentText)}</div>
         </div>
       \`;
     }
@@ -137,34 +136,35 @@ export function getReviewDrawerScript(): string {
       const peerName = isOwner ? (board.managerName || 'Assigned Manager') : board.ownerName;
       const peerRole = isOwner ? 'Manager / Approver' : ('Contributor &bull; ' + escapeHtml(board.ownerDepartment || 'Team'));
       const peerInitial = (peerName || 'M').charAt(0).toUpperCase();
-      const peerBg = isOwner ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'linear-gradient(135deg, #10b981, #059669)';
       const { label, color } = getStatusBadge(board);
+      const cycleText = board.cycle ? ' (' + escapeHtml(board.cycle) + ')' : '';
 
       drawerPane.innerHTML = \`
         <div class="drawer-header">
-          <div class="chat-peer-header">
-            <div class="chat-peer-avatar" style="background:\${peerBg}; color:#fff;">
+          <div class="drawer-peer-header">
+            <div class="drawer-peer-avatar">
               \${escapeHtml(peerInitial)}
             </div>
             <div style="min-width:0; overflow:hidden;">
-              <div style="display:flex; align-items:center; gap:6px; margin-bottom:1px; flex-wrap:wrap;">
-                <span style="font-size:0.875rem; font-weight:700; color:var(--forge-text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              <div style="display:flex; align-items:center; gap:6px; margin-bottom:1px;">
+                <span class="drawer-peer-name">
                   \${escapeHtml(peerName)}
                 </span>
-                <span id="drawerStatusBadge" style="font-size:0.65rem; font-weight:700; padding:1px 6px; border-radius:9999px; background:rgba(255,255,255,0.06); color:\${color}; white-space:nowrap;">
-                  \${label}
+                <span id="drawerStatusBadge" class="drawer-status-pill">
+                  <span class="drawer-status-beacon" style="background:\${color};"></span>
+                  <span>\${label}</span>
                 </span>
               </div>
-              <div style="font-size:0.72rem; color:var(--forge-text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                \${peerRole} &bull; <span style="color:var(--forge-primary);">\${escapeHtml(board.title)}</span> (\${escapeHtml(board.cycle)})
+              <div class="drawer-peer-sub">
+                \${peerRole} &bull; <span>\${escapeHtml(board.title)}</span>\${cycleText}
               </div>
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
-            <a href="?tab=board&id=\${encodeURIComponent(board.id)}" onclick="closeReviewDrawer(); navigateSpa('board', '\${escapeHtml(board.id)}', event)" class="btn-action btn-outline" style="height:30px; padding:0 8px; font-size:0.72rem; display:inline-flex; align-items:center; gap:4px; border-radius:6px; text-decoration:none;" data-astryx-tooltip="Inspect Canvas">
-              ${icons.layers} <span>Inspect Canvas</span>
+            <a href="?tab=board&id=\${encodeURIComponent(board.id)}" onclick="closeReviewDrawer(); navigateSpa('board', '\${escapeHtml(board.id)}', event)" class="drawer-action-btn drawer-action-btn-neutral" data-astryx-tooltip="Inspect Canvas">
+              ${icons.layers} <span>Inspect</span>
             </a>
-            <button class="btn-icon" style="width:30px; height:30px;" onclick="closeReviewDrawer()" aria-label="Close drawer">${icons.close}</button>
+            <button class="drawer-close-btn" onclick="closeReviewDrawer()" aria-label="Close drawer">${icons.close}</button>
           </div>
         </div>
 
@@ -174,9 +174,9 @@ export function getReviewDrawerScript(): string {
           <div id="drawerActionButtons" style="display:flex; align-items:center; justify-content:flex-end; gap:6px; flex-wrap:wrap;">
             \${getActionButtonsHtml(board, currentUser)}
           </div>
-          <div style="display:flex; gap:6px; align-items:center;">
-            <input id="drawerCommentInput" type="text" placeholder="Message \${escapeHtml(peerName)}..." style="flex:1; min-width:0; height:34px; border-radius:8px; background:var(--forge-bg-card); border:1px solid var(--forge-border); color:var(--forge-text-main); padding:0 10px; font-size:0.8rem;" onkeydown="if(event.key==='Enter') submitDrawerComment('\${escapeHtml(board.id)}')" />
-            <button class="btn-action btn-primary" style="height:34px; padding:0 12px; font-size:0.78rem; flex-shrink:0;" onclick="submitDrawerComment('\${escapeHtml(board.id)}')">
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input id="drawerCommentInput" class="drawer-comment-input" type="text" placeholder="Add note or message \${escapeHtml(peerName)}..." onkeydown="if(event.key==='Enter') submitDrawerComment('\${escapeHtml(board.id)}')" />
+            <button class="drawer-send-btn" onclick="submitDrawerComment('\${escapeHtml(board.id)}')">
               ${icons.send} <span>Send</span>
             </button>
           </div>
@@ -200,13 +200,18 @@ export function getReviewDrawerScript(): string {
         const { label, color } = getStatusBadge(board);
         const badge = document.getElementById('drawerStatusBadge');
         if (badge) {
-          badge.textContent = label;
-          badge.style.color = color;
+          badge.innerHTML = \`<span class="drawer-status-beacon" style="background:\${color};"></span><span>\${label}</span>\`;
         }
         const actionsContainer = document.getElementById('drawerActionButtons');
         if (actionsContainer) {
           actionsContainer.innerHTML = getActionButtonsHtml(board, currentUser);
         }
+      }
+
+      if (!isPolling) {
+        stream.innerHTML = '';
+        window._renderedCommentIds = new Set();
+        window._lastRenderedDate = '';
       }
 
       const isNearBottom = stream.scrollHeight - stream.scrollTop <= stream.clientHeight + 120;
@@ -218,14 +223,14 @@ export function getReviewDrawerScript(): string {
         const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
         if (dateStr !== window._lastRenderedDate) {
           window._lastRenderedDate = dateStr;
-          return '<div class="chat-date-divider">' + escapeHtml(dateStr) + '</div>';
+          return '<div class="timeline-date-divider">' + escapeHtml(dateStr) + '</div>';
         }
         return '';
       }
 
       if (!window._renderedCommentIds.has('sys_created')) {
         newHtml += checkDateDivider(board.createdAt);
-        newHtml += \`<div class="chat-bubble chat-bubble-system">Goal Board Created: \${escapeHtml(board.title)}</div>\`;
+        newHtml += \`<div class="timeline-event-card">Goal Board Created &bull; <strong>\${escapeHtml(board.title)}</strong></div>\`;
         window._renderedCommentIds.add('sys_created');
       }
 
@@ -236,9 +241,8 @@ export function getReviewDrawerScript(): string {
         const timeStr = new Date(subTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         const itemLen = board.items ? board.items.length : 0;
         newHtml += \`
-          <div class="chat-bubble chat-bubble-system" style="background:rgba(59,130,246,0.08); border-color:rgba(59,130,246,0.25); color:#93c5fd; border-radius:12px; padding:10px 16px; margin:6px 0; text-align:center;">
-            <div style="font-weight:700; font-size:0.8rem; margin-bottom:2px;">\${escapeHtml(board.ownerName)} submitted Board for Manager Review</div>
-            <div style="font-size:0.725rem; color:var(--forge-text-muted);">Revision \${Number(board.revisionNumber) || 1} with \${itemLen} committed milestones &bull; \${escapeHtml(timeStr)}</div>
+          <div class="timeline-event-card">
+            <strong>\${escapeHtml(board.ownerName)}</strong> submitted for Manager Review &bull; Revision \${Number(board.revisionNumber) || 1} (\${itemLen} milestones) &bull; <span class="timeline-card-time">\${escapeHtml(timeStr)}</span>
           </div>
         \`;
         window._renderedCommentIds.add(subKey);
@@ -256,9 +260,9 @@ export function getReviewDrawerScript(): string {
 
       if (board.status === 'APPROVED' && (!board.comments || !board.comments.some(function(c) { return c.type === 'APPROVAL_NOTE'; })) && !window._renderedCommentIds.has('sys_appr_badge')) {
         newHtml += \`
-          <div class="chat-bubble chat-bubble-approved">
-            <div style="font-size:0.95rem; font-weight:700; margin-bottom:4px;">Formally Sealed & Approved</div>
-            <div style="font-size:0.8rem; color:var(--forge-text-muted);">Signed by \${escapeHtml(board.approvedBy || 'Manager')}</div>
+          <div class="timeline-card timeline-card-approved">
+            <div style="display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700; font-size:0.875rem; color:var(--forge-success); margin-bottom:2px;">${icons.award} Formally Sealed & Approved</div>
+            <div class="timeline-card-time">Signed by \${escapeHtml(board.approvedBy || 'Manager')}</div>
           </div>
         \`;
         window._renderedCommentIds.add('sys_appr_badge');
@@ -281,7 +285,7 @@ export function getReviewDrawerScript(): string {
           return res.json();
         })
         .then(function(board) {
-          if (window._renderedBoardId !== board.id) {
+          if (window._renderedBoardId !== board.id || !document.getElementById('drawerChatStream')) {
             renderDrawerShell(board);
           }
           updateDrawerMessages(board, isPolling);
@@ -303,7 +307,7 @@ export function getReviewDrawerScript(): string {
 
       drawerBackdrop.classList.add('open');
 
-      if (window._renderedBoardId !== boardId) {
+      if (window._renderedBoardId !== boardId || !document.getElementById('drawerChatStream')) {
         drawerPane.innerHTML = '<div style="padding:40px; text-align:center; color:var(--forge-text-muted);">Loading review timeline...</div>';
       }
 

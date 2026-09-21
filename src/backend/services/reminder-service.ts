@@ -5,14 +5,16 @@
  */
 
 import { goalsDb } from '../../db';
-import type { Reminder } from '../../lib/types';
+import type { AuthUser, Reminder } from '../../lib/types';
 
-export function listUserReminders(userId: string, orgId: string): Reminder[] {
-  const rows = goalsDb.query<any, [string, string]>(`
+export function listUserReminders(userOrId: AuthUser | string, orgId: string): Reminder[] {
+  const uid = typeof userOrId === 'string' ? userOrId : userOrId.id;
+  const email = typeof userOrId === 'string' ? '' : (userOrId.email || '');
+  const rows = goalsDb.query<any, [string, string, string, string]>(`
     SELECT * FROM reminders 
-    WHERE org_id = ? AND user_id = ? AND is_dismissed = 0
+    WHERE org_id = ? AND (user_id = ? OR (user_id = ? AND ? != '')) AND is_dismissed = 0
     ORDER BY created_at DESC
-  `).all(orgId, userId);
+  `).all(orgId, uid, email, email);
 
   return rows.map(r => ({
     id: r.id,
@@ -27,10 +29,12 @@ export function listUserReminders(userId: string, orgId: string): Reminder[] {
   }));
 }
 
-export function dismissReminder(reminderId: string, userId: string, orgId: string): void {
+export function dismissReminder(reminderId: string, userOrId: AuthUser | string, orgId: string): void {
+  const uid = typeof userOrId === 'string' ? userOrId : userOrId.id;
+  const email = typeof userOrId === 'string' ? '' : (userOrId.email || '');
   goalsDb.run(`
     UPDATE reminders 
     SET is_dismissed = 1 
-    WHERE id = ? AND org_id = ? AND user_id = ?
-  `, [reminderId, orgId, userId]);
+    WHERE id = ? AND org_id = ? AND (user_id = ? OR (user_id = ? AND ? != ''))
+  `, [reminderId, orgId, uid, email, email]);
 }

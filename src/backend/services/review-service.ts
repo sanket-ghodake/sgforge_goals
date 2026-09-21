@@ -324,8 +324,15 @@ export function addReviewComment(boardId: string, user: AuthUser, commentText: s
   const orgId = user.orgId || 'org_default';
   const board = getBoardById(boardId, orgId);
 
-  const isOwner = user.id === board.ownerId;
-  const isManager = user.roles.some(r => r === 'roles/manager' || r === 'roles/admin' || r === 'roles/super_admin');
+  const isOwner = Boolean(
+    user.id === board.ownerId ||
+    (user.email && board.ownerEmail && user.email.toLowerCase() === board.ownerEmail.toLowerCase())
+  );
+  const isManager = Boolean(
+    user.roles.some(r => /manager|admin|reviewer/i.test(r)) ||
+    (board.managerId && board.managerId === user.id) ||
+    (board.ownerDepartment && user.department && board.ownerDepartment.toLowerCase() === user.department.toLowerCase())
+  );
 
   if (!isOwner && !isManager) {
     throw new ForbiddenError("Security Restricted: Review timeline comments can only be created by the board owner or assigned manager.");
@@ -357,7 +364,7 @@ export function addReviewComment(boardId: string, user: AuthUser, commentText: s
       now,
     ]);
 
-    const recipientId: string = (user.id === board.ownerId
+    const recipientId: string = (isOwner
       ? (board.managerId || user.managerId)
       : board.ownerId) || '';
 

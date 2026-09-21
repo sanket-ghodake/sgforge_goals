@@ -60,14 +60,49 @@ export function renderRemindersDrawer(reminders: Reminder[]): string {
               <button onclick="dismissReminderSpa('${r.id}')" style="background:none; border:none; color:var(--forge-text-muted); cursor:pointer; font-size:0.75rem;">Dismiss</button>
             </div>
             <p style="font-size: 0.85rem; color: var(--forge-text-main); margin-bottom: 8px; line-height: 1.4;">${r.message}</p>
-            <a href="?tab=board&id=${r.boardId}" onclick="closeRemindersDrawer(); navigateSpa('board', '${r.boardId}', event)" class="btn-action btn-outline" style="height: 28px; font-size: 0.75rem; padding: 0 10px;">
-              View Board ${icons.arrowRight}
-            </a>
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+              <button onclick="closeRemindersDrawer(); openReviewDrawer('${r.boardId}');" class="btn-action btn-primary" style="height: 28px; font-size: 0.75rem; padding: 0 10px;">
+                ${icons.messageSquare} Review Timeline
+              </button>
+              <a href="?tab=board&id=${r.boardId}" onclick="closeRemindersDrawer(); navigateSpa('board', '${r.boardId}', event)" class="btn-action btn-outline" style="height: 28px; font-size: 0.75rem; padding: 0 10px;">
+                Canvas ${icons.arrowRight}
+              </a>
+            </div>
           </div>
         `).join('')}
       </div>
     </div>
-  </div>`;
+  </div>
+  <script>
+    function syncRemindersBadge() {
+      fetch('api/reminders').then(function(r) { return r.json(); }).then(function(rems) {
+        var badge = document.getElementById('reminderCountBadge');
+        if (badge) {
+          var count = Array.isArray(rems) ? rems.filter(function(r) { return !r.isDismissed; }).length : 0;
+          badge.textContent = count;
+          badge.style.display = count > 0 ? 'inline-flex' : 'none';
+        }
+      }).catch(function() {});
+    }
+    function openRemindersDrawer() {
+      var d = document.getElementById('remindersDrawer');
+      if (d) d.classList.add('open');
+      syncRemindersBadge();
+    }
+    function closeRemindersDrawer() {
+      var d = document.getElementById('remindersDrawer');
+      if (d) d.classList.remove('open');
+    }
+    function dismissReminderSpa(id) {
+      fetch('api/reminders/' + id + '/dismiss', { method: 'POST' }).then(function() {
+        var card = document.getElementById('reminder-card-' + id);
+        if (card) card.remove();
+        syncRemindersBadge();
+        if (window.astryxToast) window.astryxToast('Alert dismissed', 'info');
+      });
+    }
+    setInterval(syncRemindersBadge, 10000);
+  </script>`;
 }
 
 export function renderReworkModal(): string {

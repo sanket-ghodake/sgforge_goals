@@ -20,7 +20,8 @@ import { getAstryxStyles } from './lib/ui';
 import { renderLeadershipRestrictedView, renderLoginView } from './frontend/views/login-view';
 import { listUsers } from './db';
 import { createBoard, createProjectRecord, getBoardById, listBoards, listProjects, submitBoard, updateGoalItems, updateItemProgress } from './backend/services/board-service';
-import { cloneBoard, deleteBoard, togglePlanCompletion, updateBoardNotes } from './backend/services/board-actions-service';
+import { cloneBoard, deleteBoard, getSkillSuggestions, patchGoalItem, renameBoard, toggleGapPlanLink, togglePlanCompletion, updateBoardNotes } from './backend/services/board-actions-service';
+import { exportBoardAsJson, exportBoardAsPdfHtml, exportBoardAsPpt } from './backend/services/export-service';
 import { approveBoard, addReviewComment, requestRework, requestBoardUnlock, unlockBoard, setSubmissionDeadline } from './backend/services/review-service';
 import { dismissReminder, listUserReminders } from './backend/services/reminder-service';
 import { getCachedManagerStatus, resolveViewContent, syncEmployeeProfile } from './server-helpers';
@@ -30,6 +31,10 @@ const LOG_DIR = join(import.meta.dir, '..', 'logs');
 const DOCS_DIR = join(import.meta.dir, '..', 'docs');
 const logger = createLogger('goals', LOG_DIR);
 const PORT = Number(process.env.PORT || 8090);
+
+function logUserAction(action: string, user: AuthUser, details?: Record<string, any>): void {
+  logger.info(`[ACTION:${action}] user=${user.id}`, { action, userId: user.id, ...details });
+}
 
 async function getEffectiveUser(baseUser: AuthUser, req: Request): Promise<AuthUser> {
   if (baseUser && baseUser.id) {
@@ -98,13 +103,20 @@ export function startgoalsServer(portOverride?: number) {
         if (req.method === 'POST') {
           try {
             const body = await req.json();
-            ingestBrowserTelemetry(logger, body, req);
-            return new Response(JSON.stringify({ status: 'received', traceId: body?.traceId || req.headers.get('x-trace-id') }), {
+            const isCrash = body.eventType === 'error' || body.eventType === 'unhandledrejection';
+            if (isCrash) {
+              logger.error(`[BROWSER_CRASH] ${body.message || 'Unknown browser crash'}`, body);
+            } else {
+              logger.logBrowserEvent(body.severity || 'INFO', body.message || 'Browser event', body);
+            }
+            const traceId = body?.traceId || req.headers.get('x-trace-id') || 'trace_default';
+            return new Response(JSON.stringify({ ok: true, status: 'received', traceId }), {
               status: 200,
               headers: { 'Content-Type': 'application/json' },
             });
           } catch (e: any) {
-            return new Response(JSON.stringify({ status: 'error', error: e?.message || 'Invalid telemetry payload' }), {
+            logger.warn('Failed to parse browser telemetry payload', { error: e?.message });
+            return new Response(JSON.stringify({ ok: false, status: 'error', error: e?.message || 'Invalid telemetry payload' }), {
               status: 400,
               headers: { 'Content-Type': 'application/json' },
             });
@@ -202,7 +214,8 @@ export function startgoalsServer(portOverride?: number) {
       }
 
       const user = await getEffectiveUser(auth.user, req);
-      const orgId = user.orgId || 'org_default';
+      const orgId = req.headers.get('x-user-org') || user.orgId || 'org_default';
+      user.orgId = orgId;
 
       if (pathname.endsWith('/api/auth/me') && req.method === 'GET') {
         return new Response(JSON.stringify({ ok: true, user }), {
@@ -242,22 +255,19 @@ export function startgoalsServer(portOverride?: number) {
       if (pathname.endsWith('/api/projects') && req.method === 'POST') {
         const body = await req.json().catch(() => ({}));
         if (!body.name || !body.code) {
-          return new Response(JSON.stringify({ error: 'Project name and code are required' }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' },
-          });
+          return new Response(JSON.stringify({ error: 'Project name and code are required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
         }
-        const newProj = createProjectRecord({
-          orgId,
-          name: body.name,
-          code: body.code,
-          description: body.description || '',
-          managerId: user.managerId || user.id,
-        });
-        return new Response(JSON.stringify(newProj), {
-          status: 201,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        const newProj = createProjectRecord({ orgId, name: body.name, code: body.code, description: body.description || '', managerId: user.managerId || user.id });
+        return new Response(JSON.stringify(newProj), { status: 201, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // Suggestions API (Org-wide live skill / gap / plan search)
+      if (pathname.endsWith('/api/suggestions') && req.method === 'GET') {
+        const q = url.searchParams.get('q') || '';
+        const cat = url.searchParams.get('category') || undefined;
+        const suggestions = getSkillSuggestions(orgId, q, cat);
+        logUserAction('SUGGESTIONS_FETCH', user, { q, count: suggestions.length });
+        return new Response(JSON.stringify(suggestions), { headers: { 'Content-Type': 'application/json' } });
       }
 
       if (pathname.includes('/api/boards')) {
@@ -268,6 +278,7 @@ export function startgoalsServer(portOverride?: number) {
         // GET /api/boards
         if (!boardId && req.method === 'GET') {
           const boards = listBoards(orgId);
+          logUserAction('BOARDS_LIST', user, { count: boards.length });
           return new Response(JSON.stringify(boards), { headers: { 'Content-Type': 'application/json' } });
         }
 
@@ -275,34 +286,92 @@ export function startgoalsServer(portOverride?: number) {
         if (!boardId && req.method === 'POST') {
           const body = await req.json();
           const board = createBoard(body, user);
+          logUserAction('BOARD_CREATE', user, { boardId: board.id, title: board.title });
           return new Response(JSON.stringify(board), { status: 201, headers: { 'Content-Type': 'application/json' } });
         }
 
         // GET /api/boards/:id
         if (boardId && !action && req.method === 'GET') {
           const board = getBoardById(boardId, orgId, user);
+          logUserAction('BOARD_FETCH', user, { boardId });
           return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
+        }
+
+        // PATCH /api/boards/:id (Rename board title)
+        if (boardId && !action && req.method === 'PATCH') {
+          const body = await req.json();
+          const board = renameBoard(boardId, body.title, user);
+          logUserAction('BOARD_RENAME', user, { boardId, title: body.title });
+          return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
+        }
+
+        // GET /api/boards/:id/export?format=json|ppt|pdf
+        if (boardId && action === 'export' && req.method === 'GET') {
+          const board = getBoardById(boardId, orgId, user);
+          const format = url.searchParams.get('format') || 'json';
+          logUserAction('BOARD_EXPORT', user, { boardId, format });
+          if (format === 'ppt' || format === 'pptx') {
+            const ppt = exportBoardAsPpt(board);
+            return new Response(ppt, {
+              headers: {
+                'Content-Type': 'application/vnd.ms-powerpoint',
+                'Content-Disposition': `attachment; filename="goal-board-${boardId}.ppt"`,
+              },
+            });
+          }
+          if (format === 'pdf' || format === 'html') {
+            const pdfHtml = exportBoardAsPdfHtml(board);
+            return new Response(pdfHtml, {
+              headers: {
+                'Content-Type': 'text/html; charset=utf-8',
+              },
+            });
+          }
+          const jsonStr = exportBoardAsJson(board);
+          return new Response(jsonStr, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Disposition': `attachment; filename="goal-board-${boardId}.json"`,
+            },
+          });
         }
 
         // PUT /api/boards/:id/items (Guarded by server-side lock)
         if (boardId && action === 'items' && req.method === 'PUT') {
           const body = await req.json();
           const board = updateGoalItems(boardId, body, user);
+          logUserAction('BOARD_ITEMS_UPDATE', user, { boardId, count: Array.isArray(body) ? body.length : 0 });
           return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
         }
 
-        // PATCH /api/boards/:id/items/:itemId/progress (Execution phase progress update)
+        // PATCH /api/boards/:id/items/:itemId/toggle (Toggle plan completion)
+        if (boardId && action === 'items' && req.method === 'PATCH' && pathname.endsWith('/toggle')) {
+          const partsList = pathname.split('/');
+          const itemId = partsList[partsList.indexOf('items') + 1];
+          const board = togglePlanCompletion(boardId, itemId, user);
+          logUserAction('ITEM_TOGGLE', user, { boardId, itemId });
+          return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
+        }
+
+        // PATCH /api/boards/:id/items/:itemId (Progress update or Item title/priority patch)
         if (boardId && action === 'items' && req.method === 'PATCH') {
           const partsList = pathname.split('/');
           const itemId = partsList[partsList.indexOf('items') + 1];
           const body = await req.json();
-          const board = updateItemProgress(boardId, itemId, body.progressPercent, body.status, user);
+          if (body.progressPercent !== undefined || pathname.endsWith('/progress')) {
+            const board = updateItemProgress(boardId, itemId, body.progressPercent, body.status, user);
+            logUserAction('ITEM_PROGRESS_UPDATE', user, { boardId, itemId, progressPercent: body.progressPercent });
+            return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
+          }
+          const board = patchGoalItem(boardId, itemId, body, user);
+          logUserAction('ITEM_PATCH', user, { boardId, itemId });
           return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
         }
 
         // POST /api/boards/:id/submit (Locks board)
         if (boardId && action === 'submit' && req.method === 'POST') {
           const board = submitBoard(boardId, user);
+          logUserAction('BOARD_SUBMIT', user, { boardId });
           return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
         }
 
@@ -323,12 +392,14 @@ export function startgoalsServer(portOverride?: number) {
           } else {
             board = requestRework(boardId, user, body.comment, body.itemId);
           }
+          logUserAction('REVIEW_DECISION', user, { boardId, decision: body.decision });
           return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
         }
 
         // DELETE /api/boards/:id
         if (boardId && !action && req.method === 'DELETE') {
           const result = deleteBoard(boardId, orgId, user);
+          logUserAction('BOARD_DELETE', user, { boardId });
           return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
         }
 
@@ -336,27 +407,30 @@ export function startgoalsServer(portOverride?: number) {
         if (boardId && action === 'notes' && req.method === 'PATCH') {
           const body = await req.json();
           const board = updateBoardNotes(boardId, body.notes, user);
+          logUserAction('BOARD_NOTES_SAVE', user, { boardId, length: body.notes?.length });
           return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
         }
 
         // POST /api/boards/:id/clone (Duplicate board)
         if (boardId && action === 'clone' && req.method === 'POST') {
           const board = cloneBoard(boardId, user);
+          logUserAction('BOARD_CLONE', user, { sourceBoardId: boardId, newBoardId: board.id });
           return new Response(JSON.stringify(board), { status: 201, headers: { 'Content-Type': 'application/json' } });
-        }
-
-        // PATCH /api/boards/:id/items/:itemId/toggle (Toggle plan completion)
-        if (boardId && action === 'items' && req.method === 'PATCH' && pathname.endsWith('/toggle')) {
-          const partsList = pathname.split('/');
-          const itemId = partsList[partsList.indexOf('items') + 1];
-          const board = togglePlanCompletion(boardId, itemId, user);
-          return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
         }
 
         // POST /api/boards/:id/comments (Post feedback comment to review timeline)
         if (boardId && action === 'comments' && req.method === 'POST') {
           const body = await req.json();
           const board = addReviewComment(boardId, user, body.commentText, body.itemId);
+          logUserAction('REVIEW_COMMENT_POST', user, { boardId, itemId: body.itemId });
+          return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
+        }
+
+        // POST /api/boards/:id/links (Link / Unlink skill gap and training plan)
+        if (boardId && action === 'links' && req.method === 'POST') {
+          const body = await req.json();
+          const board = toggleGapPlanLink(boardId, body.gapId, body.planId, user);
+          logUserAction('GAP_PLAN_LINK_TOGGLE', user, { boardId, gapId: body.gapId, planId: body.planId });
           return new Response(JSON.stringify(board), { headers: { 'Content-Type': 'application/json' } });
         }
       }
@@ -369,11 +443,13 @@ export function startgoalsServer(portOverride?: number) {
         const subAction = parts[remIndex + 2];
 
         if (remId && subAction === 'dismiss' && req.method === 'POST') {
-          dismissReminder(remId, user.id, orgId);
+          dismissReminder(remId, user, orgId);
+          logUserAction('REMINDER_DISMISS', user, { reminderId: remId });
           return new Response(JSON.stringify({ success: true, id: remId }), { status: 200, headers: { 'Content-Type': 'application/json' } });
         }
 
-        const reminders = listUserReminders(user.id, orgId);
+        const reminders = listUserReminders(user, orgId);
+        logUserAction('REMINDERS_FETCH', user, { count: reminders.length });
         return new Response(JSON.stringify(reminders), { headers: { 'Content-Type': 'application/json' } });
       }
 

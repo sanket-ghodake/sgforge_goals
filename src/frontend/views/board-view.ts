@@ -9,16 +9,23 @@ import { icons } from '../../lib/icons';
 import { escapeHtml } from '../../lib/ui';
 import type { AuthUser, GoalBoard, GoalItem } from '../../lib/types';
 import { getBoardStyles } from './board-styles';
-import { renderEditBoardModal, renderExportModal, renderQuickAddModal } from './board-modals';
+import { renderEditBoardModal, renderExportModal, renderLinkGapPlanModal, renderQuickAddModal } from './board-modals';
 import { renderGapRow, renderLockBanner, renderPlanCard, renderSkillRow } from './board-components';
+import { getBoardScripts } from './board-scripts';
 
 /**
  * renderBoardView
  * @requirements [HLR-UI-201] [LLR-GOALS-001]
  */
 export function renderBoardView(user: AuthUser, board: GoalBoard, userBoards: GoalBoard[] = []): string {
-  const isOwner = board.ownerId === user.id;
-  const isReviewer = !isOwner && (user.roles.includes('roles/manager') || user.roles.includes('roles/admin') || user.roles.includes('roles/super_admin'));
+  const isOwner = board.ownerId === user.id ||
+    Boolean(user.email && board.ownerEmail && user.email.toLowerCase() === board.ownerEmail.toLowerCase()) ||
+    Boolean(user.displayName && board.ownerName && user.displayName.toLowerCase() === board.ownerName.toLowerCase());
+  const isReviewer = !isOwner && (
+    user.roles.some(r => /manager|admin|reviewer/i.test(r)) ||
+    Boolean(board.managerId && board.managerId === user.id) ||
+    Boolean(board.managerName && user.displayName && board.managerName.toLowerCase() === user.displayName.toLowerCase())
+  );
   const canAccessReview = isOwner || isReviewer;
 
   const isSubmitted = board.status === 'SUBMITTED';
@@ -104,10 +111,10 @@ export function renderBoardView(user: AuthUser, board: GoalBoard, userBoards: Go
 
         <div class="board-action-toolbar">
           ${canEdit ? `
-            <button class="board-btn-icon green" onclick="openQuickAddModal('CORE_SKILL')" data-astryx-tooltip="Add Item (Skill, Gap, Plan)">
+            <button class="board-btn-icon green" onclick="openNewBoardModal()" data-astryx-tooltip="Create New Goal Board">
               ${icons.plus}
             </button>
-            <button class="board-btn-icon" onclick="openEditBoardModal()" data-astryx-tooltip="Edit Board Title & Cycle">
+            <button class="board-btn-icon" onclick="openEditBoardModal()" data-astryx-tooltip="Rename Board">
               ${icons.edit}
             </button>
           ` : ''}
@@ -116,13 +123,13 @@ export function renderBoardView(user: AuthUser, board: GoalBoard, userBoards: Go
             ${icons.copy}
           </button>
 
-          <button class="board-btn-icon" onclick="openExportModal()" data-astryx-tooltip="Export or Download Summary">
+          <button class="board-btn-icon" onclick="openExportModal()" data-astryx-tooltip="Download / Export Options">
             ${icons.download}
           </button>
 
           ${canAccessReview ? `
             <button class="board-btn-icon" onclick="openReviewDrawer('${board.id}')" data-astryx-tooltip="Open Live Review Timeline & Audit Log">
-              ${icons.rotateCcw}
+              ${icons.clipboardCheck}
             </button>
           ` : ''}
 
@@ -155,7 +162,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard, userBoards: Go
                 ${coreSkills.map(s => renderSkillRow(board.id, s, canEdit)).join('')}
               </div>
               ${canEdit ? `
-                <button class="btn-add-action" onclick="openQuickAddModal('CORE_SKILL')">
+                <button class="btn-add-action" onclick="window.startInlineAddItem && window.startInlineAddItem('${board.id}', 'CORE_SKILL', this)">
                   ${icons.plus} Add skill
                 </button>
               ` : ''}
@@ -167,7 +174,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard, userBoards: Go
                 ${strategicSkills.map(s => renderSkillRow(board.id, s, canEdit)).join('')}
               </div>
               ${canEdit ? `
-                <button class="btn-add-action" onclick="openQuickAddModal('STRATEGIC_SKILL')">
+                <button class="btn-add-action" onclick="window.startInlineAddItem && window.startInlineAddItem('${board.id}', 'STRATEGIC_SKILL', this)">
                   ${icons.plus} Add skill
                 </button>
               ` : ''}
@@ -189,7 +196,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard, userBoards: Go
               </div>
             </div>
             ${canEdit ? `
-              <button class="btn-add-action" onclick="openQuickAddModal('SKILL_GAP')">
+              <button class="btn-add-action" onclick="window.startInlineAddItem && window.startInlineAddItem('${board.id}', 'SKILL_GAP', this)">
                 ${icons.plus} Add gap
               </button>
             ` : ''}
@@ -211,7 +218,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard, userBoards: Go
                 `}
               </div>
               ${canEdit ? `
-                <button class="btn-add-action" onclick="openQuickAddModal('STRATEGIC_PLAN')">
+                <button class="btn-add-action" onclick="window.startInlineAddItem && window.startInlineAddItem('${board.id}', 'STRATEGIC_PLAN', this)">
                   ${icons.plus} Add item
                 </button>
               ` : ''}
@@ -225,7 +232,7 @@ export function renderBoardView(user: AuthUser, board: GoalBoard, userBoards: Go
                 `}
               </div>
               ${canEdit ? `
-                <button class="btn-add-action" onclick="openQuickAddModal('TACTICAL_PLAN')">
+                <button class="btn-add-action" onclick="window.startInlineAddItem && window.startInlineAddItem('${board.id}', 'TACTICAL_PLAN', this)">
                   ${icons.plus} Add item
                 </button>
               ` : ''}
@@ -234,10 +241,33 @@ export function renderBoardView(user: AuthUser, board: GoalBoard, userBoards: Go
         </div>
       </div>
 
-      <!-- 3. Bottom Notes Bar -->
+      <!-- 3. Bottom Notes & Strategic Context Deck -->
       <div class="board-notes-card">
-        <span class="notes-label">Notes:</span>
-        <textarea class="notes-textarea" id="boardNotesInput" ${!canEdit ? 'readonly' : ''} oninput="handleNotesChange('${board.id}', this.value)" placeholder="Strategic goal notes, milestones context, or 1:1 check-in cadence...">${safeNotes}</textarea>
+        <div class="board-notes-header">
+          <div class="board-notes-title-group">
+            <span class="board-notes-icon">${icons.fileText}</span>
+            <div>
+              <div class="board-notes-title">Strategic Notes & Context</div>
+              <div class="board-notes-subtitle">Shared milestone context, strategic alignment, and manager 1:1 check-in records</div>
+            </div>
+          </div>
+          <div class="board-notes-meta">
+            <span class="board-notes-status" id="boardNotesStatus" data-astryx-tooltip="Real-time autosave active">
+              <span class="board-notes-beacon"></span>
+              <span id="boardNotesStatusText">Auto-saved</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="board-notes-box">
+          <textarea class="notes-textarea" id="boardNotesInput" ${!canEdit ? 'readonly' : ''} oninput="handleNotesChange('${board.id}', this.value)" placeholder="Enter strategic goal notes, milestone dependencies, manager 1:1 cadence, or execution context...">${safeNotes}</textarea>
+          <div class="board-notes-footer">
+            <span class="board-notes-hint">
+              ${icons.infoCircle} <span>Markdown supported &bull; Synced with review audits</span>
+            </span>
+            <span class="board-notes-counter" id="boardNotesCounter">${safeNotes.length} chars</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -245,243 +275,11 @@ export function renderBoardView(user: AuthUser, board: GoalBoard, userBoards: Go
     ${renderQuickAddModal(board.id)}
     ${renderEditBoardModal(board)}
     ${renderExportModal(board)}
+    ${renderLinkGapPlanModal()}
 
     <!-- Client-Side Runtime Engine -->
     <script>
-      window.currentBoardId = "${board.id}";
-
-      window.toggleBoardSwitcherMenu = function(forceState) {
-        const menu = document.getElementById('boardSwitcherMenu');
-        if (!menu) return;
-        if (forceState !== undefined) {
-          if (forceState) menu.classList.add('open');
-          else menu.classList.remove('open');
-        } else {
-          menu.classList.toggle('open');
-        }
-      };
-
-      if (!window._boardSwitcherClickBound) {
-        window._boardSwitcherClickBound = true;
-        document.addEventListener('click', function(e) {
-          if (!e.target.closest('.board-switcher-container')) {
-            const menu = document.getElementById('boardSwitcherMenu');
-            if (menu) menu.classList.remove('open');
-          }
-        });
-      }
-
-      window.openQuickAddModal = function(defaultCat) {
-        const modal = document.getElementById('quickAddItemModal');
-        if (defaultCat && window.selectModernOption) {
-          const labels = {
-            CORE_SKILL: '1. Key Skills: Core / Technical Skill',
-            STRATEGIC_SKILL: '1. Key Skills: Transformation / Strategic Skill',
-            SKILL_GAP: '2. Skill Gaps: Identified Gap',
-            STRATEGIC_PLAN: '3. Training Plans: Strategic Plan',
-            TACTICAL_PLAN: '3. Training Plans: Tactical Plan'
-          };
-          window.selectModernOption('quickAddCategorySelect', defaultCat, labels[defaultCat] || defaultCat);
-        }
-        if (modal) modal.classList.add('open');
-      };
-
-      window.closeQuickAddModal = function() {
-        const modal = document.getElementById('quickAddItemModal');
-        if (modal) modal.classList.remove('open');
-      };
-
-      window.openEditBoardModal = function() {
-        const modal = document.getElementById('editBoardModal');
-        if (modal) modal.classList.add('open');
-      };
-
-      window.closeEditBoardModal = function() {
-        const modal = document.getElementById('editBoardModal');
-        if (modal) modal.classList.remove('open');
-      };
-
-      window.openExportModal = function() {
-        const modal = document.getElementById('exportBoardModal');
-        if (modal) modal.classList.add('open');
-      };
-
-      window.closeExportModal = function() {
-        const modal = document.getElementById('exportBoardModal');
-        if (modal) modal.classList.remove('open');
-      };
-
-      window.copyExportJson = function() {
-        const textarea = document.getElementById('exportJsonDisplay');
-        if (textarea) {
-          navigator.clipboard.writeText(textarea.value);
-          if (window.astryxToast) window.astryxToast('Board JSON copied to clipboard', 'info');
-        }
-      };
-
-      window.downloadBoardJson = function(boardId) {
-        const textarea = document.getElementById('exportJsonDisplay');
-        if (!textarea) return;
-        const blob = new Blob([textarea.value], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'goal-board-' + boardId + '.json';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      };
-
-      window.handleQuickAddSubmit = function(e) {
-        e.preventDefault();
-        const cat = document.querySelector('#quickAddCategorySelect input[type="hidden"]')?.value || 'CORE_SKILL';
-        const prio = document.querySelector('#quickAddPrioritySelect input[type="hidden"]')?.value || 'MEDIUM';
-        const qtr = document.querySelector('#quickAddQuarterSelect input[type="hidden"]')?.value || 'Target Qtr';
-        const title = document.getElementById('quickAddTitleInput').value.trim();
-        if (!title) return;
-
-        fetch('api/boards/' + window.currentBoardId)
-          .then(r => r.json())
-          .then(board => {
-            const items = (board.items || []).map(i => ({
-              id: i.id,
-              title: i.title,
-              description: i.description || '',
-              category: i.category,
-              targetDate: i.targetDate,
-              weight: Number(i.weight) || 0,
-              progressPercent: Number(i.progressPercent) || 0,
-              status: i.status || 'PENDING',
-              priority: i.priority || 'MEDIUM',
-              targetQtr: i.targetQtr || null,
-              plansCount: Number(i.plansCount) || 0
-            }));
-
-            items.push({
-              title,
-              description: '',
-              category: cat,
-              targetDate: '2026-03-31',
-              weight: 0,
-              progressPercent: 0,
-              status: 'PENDING',
-              priority: prio,
-              targetQtr: qtr,
-              plansCount: 0
-            });
-
-            return fetch('api/boards/' + window.currentBoardId + '/items', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ items })
-            });
-          })
-          .then(r => {
-            if (!r.ok) throw new Error('Failed to add item');
-            window.closeQuickAddModal();
-            if (window.astryxToast) window.astryxToast('Item added to board', 'success');
-            loadSpaView('board', window.currentBoardId);
-          })
-          .catch(err => { if (window.astryxToast) window.astryxToast(err.message, 'error'); });
-      };
-
-      window.togglePlan = function(boardId, itemId) {
-        fetch('api/boards/' + boardId + '/items/' + itemId + '/toggle', { method: 'PATCH' })
-          .then(r => {
-            if (!r.ok) throw new Error('Toggle failed');
-            return r.json();
-          })
-          .then(() => {
-            loadSpaView('board', boardId);
-          })
-          .catch(err => { if (window.astryxToast) window.astryxToast(err.message, 'error'); });
-      };
-
-      window.handleDeleteItem = function(boardId, itemId) {
-        if (!window.showModernConfirm) return;
-        window.showModernConfirm({
-          title: 'Remove Item',
-          message: 'Remove this item from the board blueprint?',
-          confirmText: 'Remove',
-          confirmVariant: 'destructive',
-          onConfirm: () => {
-            fetch('api/boards/' + boardId)
-              .then(r => r.json())
-              .then(board => {
-                const items = (board.items || []).filter(i => i.id !== itemId).map(i => ({
-                  id: i.id, title: i.title, description: i.description || '', category: i.category,
-                  targetDate: i.targetDate, weight: Number(i.weight) || 0, progressPercent: Number(i.progressPercent) || 0,
-                  status: i.status || 'PENDING', priority: i.priority || 'MEDIUM', targetQtr: i.targetQtr || null,
-                  plansCount: Number(i.plansCount) || 0
-                }));
-                return fetch('api/boards/' + boardId + '/items', {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ items })
-                });
-              })
-              .then(() => {
-                if (window.astryxToast) window.astryxToast('Item removed', 'info');
-                loadSpaView('board', boardId);
-              });
-          }
-        });
-      };
-
-      window.handleNotesChange = function(boardId, notes) {
-        clearTimeout(window.boardNotesTimeout);
-        window.boardNotesTimeout = setTimeout(() => {
-          fetch('api/boards/' + boardId + '/notes', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ notes })
-          }).then(() => {
-            if (window.astryxToast) window.astryxToast('Notes auto-saved', 'info');
-          });
-        }, 600);
-      };
-
-      window.handleCloneBoard = function(boardId) {
-        fetch('api/boards/' + boardId + '/clone', { method: 'POST' })
-          .then(r => r.json())
-          .then(newBoard => {
-            if (window.astryxToast) window.astryxToast('Board duplicated successfully', 'success');
-            navigateSpa('board', newBoard.id);
-          });
-      };
-
-      window.handleDeleteBoard = function(boardId) {
-        if (!window.showModernConfirm) return;
-        window.showModernConfirm({
-          title: 'Delete Draft Board',
-          message: 'Permanently remove this goal board and all milestones?',
-          confirmText: 'Delete Board',
-          confirmVariant: 'destructive',
-          onConfirm: () => {
-            fetch('api/boards/' + boardId, { method: 'DELETE' })
-              .then(r => {
-                if (!r.ok) throw new Error('Deletion failed');
-                if (window.astryxToast) window.astryxToast('Board deleted', 'info');
-                navigateSpa('boards', null);
-              })
-              .catch(err => { if (window.astryxToast) window.astryxToast(err.message, 'error'); });
-          }
-        });
-      };
-
-      window.submitBoardForReview = function() {
-        fetch('api/boards/' + window.currentBoardId + '/submit', { method: 'POST' })
-          .then(r => {
-            if (!r.ok) return r.json().then(e => { throw new Error(e.detail || e.title || 'Submission failed'); });
-            return r.json();
-          })
-          .then(() => {
-            if (window.astryxToast) window.astryxToast('Board submitted for manager review.', 'success');
-            setTimeout(() => { loadSpaView('board', window.currentBoardId); }, 600);
-          })
-          .catch(err => { if (window.astryxToast) window.astryxToast(err.message, 'error'); });
-      };
+      ${getBoardScripts(board.id)}
     </script>
   `;
 }

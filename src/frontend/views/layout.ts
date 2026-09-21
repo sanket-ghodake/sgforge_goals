@@ -51,10 +51,71 @@ export function renderLayout(options: LayoutOptions): string {
     })();
   </script>
   ${getHeadStateScript()}
-  <link rel="stylesheet" href="assets/app.css">
+  <link rel="stylesheet" href="assets/app.css?v=20260921_0915">
   <style>
-    /* Critical CSS fallback variables */
+    /* Critical CSS fallback variables & Review Drawer Engine */
     :root { color-scheme: dark light; }
+    .drawer-backdrop { display: none; position: fixed; top: 58px; left: 0; right: 0; bottom: 0; height: calc(100vh - 58px); background: rgba(0, 0, 0, 0.25); z-index: 210; animation: fadeIn 0.2s ease; }
+    [data-theme="light"] .drawer-backdrop { background: rgba(0, 0, 0, 0.12); }
+    .drawer-backdrop.open { display: block; }
+    .drawer-pane { position: absolute; top: 0; right: 0; bottom: 0; width: 460px; max-width: 100vw; height: 100%; background: var(--forge-glass-surface); border-left: 1px solid var(--forge-glass-border); border-radius: 18px 0 0 18px; box-shadow: -14px 0 44px rgba(0, 0, 0, 0.4); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); z-index: 220; display: flex; flex-direction: column; overflow: hidden; transform: translateX(100%); transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1); }
+    .drawer-backdrop.open .drawer-pane { transform: translateX(0); }
+    [data-theme="light"] .drawer-pane { background: rgba(255, 255, 255, 0.96); border-left: 1px solid var(--forge-border); box-shadow: -14px 0 44px rgba(0, 0, 0, 0.08); }
+    @media (max-width: 640px) { .drawer-backdrop { top: 0; height: 100vh; } .drawer-pane { width: 100vw; max-width: 100vw; border-radius: 0; border-left: none; } }
+    .drawer-header { height: 60px; padding: 0 18px; border-bottom: 1px solid var(--forge-border); background: var(--forge-bg-surface); display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-shrink: 0; }
+    [data-theme="light"] .drawer-header { background: #ffffff; border-bottom-color: var(--forge-border); }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: var(--forge-bg-root); }
+    [data-theme="light"] .drawer-body { background: #f8f8fc; }
+    .drawer-footer { padding: 12px 18px; border-top: 1px solid var(--forge-border); background: var(--forge-bg-surface); display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
+    [data-theme="light"] .drawer-footer { background: #ffffff; border-top-color: var(--forge-border); }
+    #drawerActionButtons:empty { display: none; margin: 0; }
+    .drawer-peer-header { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .drawer-peer-avatar { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0; background: linear-gradient(135deg, var(--forge-primary), var(--forge-accent)); color: #fff; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25); }
+    .drawer-peer-name { font-size: 0.875rem; font-weight: 600; color: var(--forge-text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .drawer-peer-sub { font-size: 0.72rem; color: var(--forge-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .drawer-status-pill { font-size: 0.68rem; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--forge-border); color: var(--forge-text-muted); display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    [data-theme="light"] .drawer-status-pill { background: rgba(0, 0, 0, 0.04); }
+    .drawer-status-beacon { width: 6px; height: 6px; border-radius: 50%; position: relative; display: inline-block; }
+    .drawer-status-beacon::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; background: inherit; opacity: 0.45; animation: beaconPulse 2s infinite ease-out; }
+    @keyframes beaconPulse { 0% { transform: scale(0.8); opacity: 0.8; } 70% { transform: scale(2.3); opacity: 0; } 100% { transform: scale(2.3); opacity: 0; } }
+    .drawer-close-btn { width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; border: none; background: transparent; color: var(--forge-text-muted); transition: all 0.15s ease; }
+    .drawer-close-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--forge-text-main); }
+    [data-theme="light"] .drawer-close-btn:hover { background: rgba(0, 0, 0, 0.05); color: var(--forge-text-main); }
+    .timeline-card { width: fit-content; max-width: 84%; border-radius: 12px; padding: 10px 14px; background: var(--forge-bg-card); border: 1px solid var(--forge-border); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); word-break: break-word; animation: timelineSlide 0.18s ease; display: flex; flex-direction: column; gap: 4px; }
+    .timeline-card-me { align-self: flex-end; background: rgba(99, 102, 241, 0.12); border-color: rgba(99, 102, 241, 0.32); }
+    [data-theme="light"] .timeline-card-me { background: #eef2ff; border-color: rgba(79, 70, 229, 0.28); color: #1e1b4b; }
+    .timeline-card-other { align-self: flex-start; background: var(--forge-bg-card); border-color: var(--forge-border); }
+    [data-theme="light"] .timeline-card-other { background: #ffffff; border-color: var(--forge-border); color: var(--forge-text-main); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04); }
+    .timeline-card-reviewer { border-color: rgba(99, 102, 241, 0.35); background: rgba(99, 102, 241, 0.04); }
+    [data-theme="light"] .timeline-card-reviewer { border-color: rgba(79, 70, 229, 0.28); background: rgba(79, 70, 229, 0.03); }
+    .timeline-card-rework { border-left: 3px solid var(--forge-warning); background: var(--forge-warning-bg); }
+    .timeline-card-approved { align-self: center; width: fit-content; max-width: 90%; border: 1px solid rgba(16, 185, 129, 0.4); background: var(--forge-success-bg); text-align: center; padding: 12px 16px; align-items: center; }
+    .timeline-card-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.75rem; }
+    .timeline-card-author { font-weight: 600; color: var(--forge-text-main); display: inline-flex; align-items: center; gap: 6px; }
+    .timeline-card-time { font-size: 0.68rem; color: var(--forge-text-subtle); font-family: var(--font-mono); font-feature-settings: "tnum"; }
+    .timeline-card-body { font-size: 0.8125rem; line-height: 1.45; color: var(--forge-text-main); }
+    .timeline-milestone-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 0.68rem; padding: 2px 7px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--forge-border); color: var(--forge-text-muted); width: fit-content; }
+    [data-theme="light"] .timeline-milestone-badge { background: #f1f5f9; color: #475569; }
+    .timeline-event-card, .timeline-date-divider { align-self: center; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--forge-border); border-radius: 9999px; padding: 3px 12px; font-size: 0.68rem; color: var(--forge-text-muted); text-align: center; margin: 3px 0; max-width: 90%; }
+    [data-theme="light"] .timeline-event-card, [data-theme="light"] .timeline-date-divider { background: #ffffff; color: #64748b; }
+    .timeline-date-divider { font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.65rem; border: none; background: transparent; color: var(--forge-text-subtle); }
+    [data-theme="light"] .timeline-date-divider { background: transparent; }
+    .drawer-comment-input { flex: 1; min-width: 0; height: 38px; border-radius: 8px; background: var(--forge-bg-card); border: 1px solid var(--forge-border); color: var(--forge-text-main); padding: 0 12px; font-size: 0.8125rem; outline: none; font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s; }
+    .drawer-comment-input::placeholder { color: var(--forge-text-subtle); }
+    .drawer-comment-input:focus { border-color: var(--forge-primary); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.18); }
+    [data-theme="light"] .drawer-comment-input { background: #ffffff; border-color: var(--forge-border); }
+    .drawer-send-btn { height: 38px; padding: 0 14px; font-size: 0.8125rem; font-weight: 600; flex-shrink: 0; border-radius: 8px; border: none; background: var(--forge-primary); color: #fff; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: background 0.15s, transform 0.1s; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25); }
+    .drawer-send-btn:hover { background: var(--forge-primary-hover); transform: translateY(-1px); }
+    .drawer-send-btn:active { transform: scale(0.98); }
+    .drawer-action-btn { height: 30px; padding: 0 10px; font-size: 0.75rem; font-weight: 500; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; text-decoration: none; border: none; transition: all 0.15s ease; }
+    .drawer-action-btn-neutral { background: var(--forge-bg-card); color: var(--forge-text-main); border: 1px solid var(--forge-border); }
+    .drawer-action-btn-neutral:hover { background: var(--forge-bg-card-hover); border-color: var(--forge-border-medium); }
+    [data-theme="light"] .drawer-action-btn-neutral { background: #ffffff; color: var(--forge-text-main); border-color: var(--forge-border); }
+    [data-theme="light"] .drawer-action-btn-neutral:hover { background: #f8fafc; border-color: #cbd5e1; }
+    .drawer-action-btn-primary { background: var(--forge-primary); color: #fff; font-weight: 600; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25); }
+    .drawer-action-btn-primary:hover { background: var(--forge-primary-hover); }
+    .drawer-action-status-label { font-size: 0.725rem; font-weight: 500; color: var(--forge-text-muted); display: inline-flex; align-items: center; gap: 4px; }
+    [data-theme="light"] .drawer-action-status-label { color: #64748b; }
   </style>
 </head>
 <body>
@@ -207,6 +268,11 @@ export function renderLayout(options: LayoutOptions): string {
           // Close Mobile Sidebar Drawer if Open
           const sb = document.getElementById('sbSidebar');
           if (sb) sb.classList.remove('mobile-open');
+
+          const p = new URLSearchParams(window.location.search);
+          if ((p.get('review') === '1' || p.get('openReview') === '1') && boardId) {
+            setTimeout(() => { if (typeof openReviewDrawer === 'function') openReviewDrawer(boardId); }, 120);
+          }
         })
         .catch(err => {
           mainContainer.style.opacity = '1';
@@ -227,11 +293,13 @@ export function renderLayout(options: LayoutOptions): string {
 
     function sendBrowserTelemetry(eventType, message, stack, meta) {
       try {
+        const severity = (eventType === 'error' || eventType === 'unhandledrejection') ? 'ERROR' : 'INFO';
         fetch('api/logs/browser', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             eventType: eventType,
+            severity: severity,
             message: message,
             stack: stack || '',
             url: window.location.href,
@@ -361,23 +429,6 @@ export function renderLayout(options: LayoutOptions): string {
       document.getElementById('newBoardModal').classList.remove('open');
     }
 
-    function openRemindersDrawer() {
-      document.getElementById('remindersDrawer').classList.add('open');
-    }
-
-    function closeRemindersDrawer() {
-      document.getElementById('remindersDrawer').classList.remove('open');
-    }
-
-    function dismissReminderSpa(id) {
-      fetch('api/reminders/' + id + '/dismiss', { method: 'POST' })
-        .then(() => {
-          const card = document.getElementById('reminder-card-' + id);
-          if (card) card.remove();
-          if (window.astryxToast) window.astryxToast('Alert dismissed', 'info');
-        });
-    }
-
     function handleCreateBoard(e) {
       e.preventDefault();
       const titleInput = document.getElementById('boardTitleInput');
@@ -419,9 +470,13 @@ export function renderLayout(options: LayoutOptions): string {
       }
     });
 
+    const initParams = new URLSearchParams(window.location.search);
+    if ((initParams.get('review') === '1' || initParams.get('openReview') === '1') && initParams.get('id')) {
+      setTimeout(() => { if (typeof openReviewDrawer === 'function') openReviewDrawer(initParams.get('id')); }, 200);
+    }
+
     ${getReviewDrawerScript()}
   </script>
 </body>
 </html>`;
 }
-

@@ -24,14 +24,14 @@ export function getPriorityBadgeClass(priority: PriorityLevel | string): string 
 export function renderSkillRow(boardId: string, item: GoalItem, canEdit: boolean): string {
   const badgeClass = getPriorityBadgeClass(item.priority || 'MEDIUM');
   return `
-    <div class="tri-item-row">
+    <div class="tri-item-row" data-item-id="${item.id}">
       <div class="tri-item-left">
-        <span class="tri-badge ${badgeClass}">${escapeHtml(item.priority || 'MEDIUM')}</span>
-        <span class="tri-item-title">${escapeHtml(item.title)}</span>
+        <span class="tri-badge ${badgeClass} ${canEdit ? 'clickable' : ''}" ${canEdit ? `onclick="cycleItemPriority('${boardId}', '${item.id}', this)" data-astryx-tooltip="Click to change priority (Critical, Medium, Low)"` : ''}>${escapeHtml(item.priority || 'MEDIUM')}</span>
+        <span class="tri-item-title ${canEdit ? 'editable' : ''}" ${canEdit ? `onclick="startItemTitleEdit('${boardId}', '${item.id}', this)" data-astryx-tooltip="Click to modify text"` : ''}>${escapeHtml(item.title)}</span>
       </div>
       ${canEdit ? `
-        <button type="button" class="btn-icon" onclick="handleDeleteItem('${boardId}', '${item.id}')" data-astryx-tooltip="Remove skill" style="width:22px; height:22px; color: var(--forge-text-muted);">
-          ${icons.trash}
+        <button type="button" class="btn-icon btn-item-cancel" onclick="handleDeleteItem('${boardId}', '${item.id}')" data-astryx-tooltip="Remove skill" style="width:22px; height:22px; color: var(--forge-text-muted); flex-shrink: 0;">
+          ${icons.close}
         </button>
       ` : ''}
     </div>
@@ -43,19 +43,25 @@ export function renderSkillRow(boardId: string, item: GoalItem, canEdit: boolean
  */
 export function renderGapRow(boardId: string, item: GoalItem, canEdit: boolean): string {
   const badgeClass = getPriorityBadgeClass(item.priority || 'LOW');
+  const count = item.plansCount || 0;
+  const isUnlinked = count === 0;
+
   return `
-    <div class="tri-item-row">
+    <div class="tri-item-row ${isUnlinked ? 'tri-gap-unlinked' : ''}" data-item-id="${item.id}">
       <div class="tri-item-left">
-        <span class="tri-badge ${badgeClass}">${escapeHtml(item.priority || 'LOW')}</span>
-        <span class="tri-item-title">${escapeHtml(item.title)}</span>
+        <span class="tri-badge ${badgeClass} ${canEdit ? 'clickable' : ''}" ${canEdit ? `onclick="cycleItemPriority('${boardId}', '${item.id}', this)" data-astryx-tooltip="Click to change priority (Critical, Medium, Low)"` : ''}>${escapeHtml(item.priority || 'LOW')}</span>
+        <span class="tri-item-title ${canEdit ? 'editable' : ''}" ${canEdit ? `onclick="startItemTitleEdit('${boardId}', '${item.id}', this)" data-astryx-tooltip="Click to modify text"` : ''}>${escapeHtml(item.title)}</span>
       </div>
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <span style="font-size: 0.72rem; padding: 1px 8px; border-radius: 6px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border); color: var(--forge-text-muted);">
-          ${item.plansCount || 0} plans
-        </span>
+      <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+        <button type="button" class="gap-plans-count-badge ${isUnlinked ? 'unlinked' : 'linked'}" 
+          ${canEdit ? `onclick="window.openLinkGapPlanModal && window.openLinkGapPlanModal('${boardId}', '${item.id}', 'GAP', this)"` : ''}
+          data-astryx-tooltip="${isUnlinked ? '0 Plans Linked • Click to link an action plan' : `${count} plan(s) linked • Click to manage`}">
+          <span style="display: flex;">${icons.link}</span>
+          <span>${count} ${count === 1 ? 'plan' : 'plans'}</span>
+        </button>
         ${canEdit ? `
-          <button type="button" class="btn-icon" onclick="handleDeleteItem('${boardId}', '${item.id}')" data-astryx-tooltip="Remove gap" style="width:22px; height:22px; color: var(--forge-text-muted);">
-            ${icons.trash}
+          <button type="button" class="btn-icon btn-item-cancel" onclick="handleDeleteItem('${boardId}', '${item.id}')" data-astryx-tooltip="Remove gap" style="width:22px; height:22px; color: var(--forge-text-muted); flex-shrink: 0;">
+            ${icons.close}
           </button>
         ` : ''}
       </div>
@@ -69,30 +75,57 @@ export function renderGapRow(boardId: string, item: GoalItem, canEdit: boolean):
 export function renderPlanCard(boardId: string, item: GoalItem, canEdit: boolean): string {
   const isDone = item.status === 'COMPLETED';
   const badgeClass = getPriorityBadgeClass(item.priority || 'MEDIUM');
+  const linkedGaps = item.linkedGaps || [];
+
   return `
-    <div class="tri-plan-card ${isDone ? 'completed' : ''}">
+    <div class="tri-plan-card ${isDone ? 'completed' : ''}" data-item-id="${item.id}">
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-        <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
-          <button type="button" onclick="togglePlan('${boardId}', '${item.id}')" style="background: none; border: none; cursor: pointer; color: ${isDone ? 'var(--forge-success)' : 'var(--forge-text-muted)'}; display: flex; align-items: center; padding: 0;" data-astryx-tooltip="${isDone ? 'Mark Incomplete' : 'Mark Completed'}">
+        <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+          <button type="button" onclick="togglePlan('${boardId}', '${item.id}')" style="background: none; border: none; cursor: pointer; color: ${isDone ? 'var(--forge-success)' : 'var(--forge-text-muted)'}; display: flex; align-items: center; padding: 0; flex-shrink: 0;" data-astryx-tooltip="${isDone ? 'Mark Incomplete' : 'Mark Completed'}">
             ${isDone ? icons.checkCircle2 : icons.circleDot}
           </button>
-          <span class="tri-badge ${badgeClass}">${escapeHtml(item.priority || 'MEDIUM')}</span>
-          <span class="tri-item-title">${escapeHtml(item.title)}</span>
+          <span class="tri-badge ${badgeClass} ${canEdit ? 'clickable' : ''}" ${canEdit ? `onclick="cycleItemPriority('${boardId}', '${item.id}', this)" data-astryx-tooltip="Click to change priority (Critical, Medium, Low)"` : ''}>${escapeHtml(item.priority || 'MEDIUM')}</span>
+          <span class="tri-item-title ${canEdit ? 'editable' : ''}" ${canEdit ? `onclick="startItemTitleEdit('${boardId}', '${item.id}', this)" data-astryx-tooltip="Click to modify text"` : ''}>${escapeHtml(item.title)}</span>
         </div>
         ${canEdit ? `
-          <button type="button" class="btn-icon" onclick="handleDeleteItem('${boardId}', '${item.id}')" data-astryx-tooltip="Remove plan" style="width:22px; height:22px; color: var(--forge-text-muted);">
-            ${icons.trash}
+          <button type="button" class="btn-icon btn-item-cancel" onclick="handleDeleteItem('${boardId}', '${item.id}')" data-astryx-tooltip="Remove plan" style="width:22px; height:22px; color: var(--forge-text-muted); flex-shrink: 0;">
+            ${icons.close}
           </button>
         ` : ''}
       </div>
 
-      <div style="display: flex; justify-content: space-between; align-items: center; padding-left: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding-left: 24px; margin-top: 6px; flex-wrap: wrap; gap: 6px;">
         <span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: var(--forge-bg-card); border: 1px solid var(--forge-border); color: var(--forge-text-muted); display: inline-flex; align-items: center; gap: 4px;">
           ${escapeHtml(item.targetQtr || 'Target Qtr')} ${icons.chevronDown}
         </span>
-        <span style="color: var(--forge-text-muted); display: flex;" data-astryx-tooltip="Linked milestone reference">
-          ${icons.paperclip}
-        </span>
+        
+        <div style="display: flex; align-items: center; gap: 6px;">
+          ${linkedGaps.length === 0 ? `
+            <button type="button" class="plan-unlinked-highlight-btn" 
+              ${canEdit ? `onclick="window.openLinkGapPlanModal && window.openLinkGapPlanModal('${boardId}', '${item.id}', 'PLAN', this)"` : ''}
+              data-astryx-tooltip="No Skill Gap Linked • Click to link an identified gap">
+              <span style="display: flex;">${icons.link}</span>
+              <span>+ Link Gap</span>
+            </button>
+          ` : `
+            <div class="teams-avatar-stack">
+              ${linkedGaps.slice(0, 3).map(g => {
+                const words = g.title.trim().split(/\s+/);
+                const initials = words.slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('') || 'GP';
+                const prio = (g.priority || 'MEDIUM').toLowerCase();
+                return `<div class="teams-avatar-circle ${prio}" data-astryx-tooltip="Linked Gap: ${escapeHtml(g.title)} (${g.priority || 'MEDIUM'})" ${canEdit ? `onclick="window.openLinkGapPlanModal && window.openLinkGapPlanModal('${boardId}', '${item.id}', 'PLAN', this)"` : ''}>${initials}</div>`;
+              }).join('')}
+              ${linkedGaps.length > 3 ? `
+                <div class="teams-avatar-circle overflow" data-astryx-tooltip="+${linkedGaps.length - 3} more gaps linked" ${canEdit ? `onclick="window.openLinkGapPlanModal && window.openLinkGapPlanModal('${boardId}', '${item.id}', 'PLAN', this)"` : ''}>+${linkedGaps.length - 3}</div>
+              ` : ''}
+              ${canEdit ? `
+                <button type="button" class="teams-add-circle-btn" onclick="window.openLinkGapPlanModal && window.openLinkGapPlanModal('${boardId}', '${item.id}', 'PLAN', this)" data-astryx-tooltip="Link another skill gap">
+                  ${icons.plus}
+                </button>
+              ` : ''}
+            </div>
+          `}
+        </div>
       </div>
     </div>
   `;

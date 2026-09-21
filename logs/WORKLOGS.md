@@ -93,3 +93,21 @@
 2026-09-21 07:33 | Implemented silent token auto-renewal in fetch interceptor and heartbeat with 5-tier tests and architecture docs
 2026-09-21 08:15 | Removed Whole Board dropdown from review timeline drawer
 2026-09-21 02:46 | pre-commit: staged 44 files (45 files changed, 2391 insertions(+), 779 deletions(-))
+2026-09-21 08:22 | Refined review pane palette to authentic WhatsApp light and dark design
+2026-09-21 08:32 | Upgraded review timeline drawer to ultra-premium minimal layout with inline critical styling
+2026-09-21 08:39 | Align Review Timeline Drawer with 4-library executive design system (shadcn + Magic UI + Aceternity + Luxe)
+2026-09-21 08:44 | Support conversational left/right alignment with glassmorphic cards in review stream
+2026-09-21 08:45 | Remove background blur from review and action alerts drawer backdrops
+2026-09-21 08:48 | Remove designation badges from timeline message cards
+2026-09-21 08:56 | Support interactive priority cycling and inline title editing on goal skills and gaps
+2026-09-21 08:58 | Enhance notes section with dedicated text box, header metadata, live status, and char counter
+2026-09-21 09:02 | Support + new board, rename modal without cycle text, multi-format exports (JSON, PPT, Landscape PDF), and review icon
+2026-09-21 09:12 | refactor(ui): modernize reviews and approval hub filter pills, view switcher, and segmented controls
+2026-09-21 09:16 | Fix review message reflection bugs, add direct review linking, and implement centralized action & crash logging
+2026-09-21 09:25 | Implement organization-wide live suggestion search for skills, gaps, and training plans
+2026-09-21 09:37 | Implement skill gap to training plan linking with zoom pulse animation and Teams-style avatar clusters
+2026-09-21 09:42 | Replace item delete icons with cancel icon, add inline creation for skills/gaps/plans, and add anchored popover with edge clamping for gap-plan linking
+2026-09-21 09:43 | Commit: Add gap-plan linking, inline skill creation, and cancel icon interactions
+2026-09-21 09:46 | Fix double cancel icon on editing pane by eliminating duplicate inner cancel button
+2026-09-21 09:46 | Commit: Interactive gap-plan linking, inline item creation, and single cancel icon UX
+2026-09-21 04:17 | pre-commit: staged 29 files (30 files changed, 3251 insertions(+), 908 deletions(-))

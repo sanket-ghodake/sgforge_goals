@@ -127,6 +127,9 @@ export interface GoalItem {
   priority?: PriorityLevel;
   targetQtr?: string | null;
   plansCount?: number;
+  linkedPlanIds?: string[];
+  linkedGapIds?: string[];
+  linkedGaps?: Array<{ id: string; title: string; priority?: PriorityLevel }>;
   createdAt: number;
   updatedAt: number;
 }

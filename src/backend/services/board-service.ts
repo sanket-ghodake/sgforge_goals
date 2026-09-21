@@ -5,7 +5,7 @@
  */
 
 import { goalsDb, upsertUser } from '../../db';
-import type { AuthUser, CreateBoardInput, GoalBoard, GoalBoardRow, GoalItem, GoalItemRow, Project, ProjectRow, UpdateGoalItemsInput } from '../../lib/types';
+import type { AuthUser, CreateBoardInput, GoalBoard, GoalBoardRow, GoalItem, GoalItemRow, PriorityLevel, Project, ProjectRow, UpdateGoalItemsInput } from '../../lib/types';
 
 export class BoardLockedError extends Error {
   readonly status = 423;
@@ -156,9 +156,17 @@ export function getBoardById(boardId: string, orgId: string, requestingUser?: Au
     throw new NotFoundError(`Goal Board "${boardId}" not found in this organization.`);
   }
 
-  // Security Authorization Check: Timeline comments accessible ONLY by board owner or manager/admin
-  const isOwner = requestingUser ? requestingUser.id === row.owner_id : true;
-  const isManager = requestingUser ? (requestingUser.roles.some((r: string) => r === 'roles/manager' || r === 'roles/admin' || r === 'roles/super_admin') || row.manager_id === requestingUser.id) : true;
+  // Security Authorization Check: Timeline comments accessible by board owner or manager/admin
+  const isOwner = requestingUser ? Boolean(
+    requestingUser.id === row.owner_id ||
+    (requestingUser.email && row.owner_email && requestingUser.email.toLowerCase() === row.owner_email.toLowerCase())
+  ) : true;
+  const isManager = requestingUser ? Boolean(
+    requestingUser.roles.some((r: string) => /manager|admin|reviewer/i.test(r)) ||
+    row.manager_id === requestingUser.id ||
+    (row.manager_email && requestingUser.email && row.manager_email.toLowerCase() === requestingUser.email.toLowerCase()) ||
+    (row.owner_department && requestingUser.department && row.owner_department.toLowerCase() === requestingUser.department.toLowerCase())
+  ) : true;
   const allowedTimeline = isOwner || isManager;
 
   // Auto-lock check for overdue submission deadlines
@@ -171,14 +179,34 @@ export function getBoardById(boardId: string, orgId: string, requestingUser?: Au
     }
   }
 
-  const items = goalsDb.query<any, [string]>(`
+  const rawLinks = goalsDb.query<any, [string]>(`
+    SELECT gap_id, plan_id FROM goal_gap_plan_links WHERE board_id = ?
+  `).all(boardId);
+
+  const rawItems = goalsDb.query<any, [string]>(`
     SELECT * FROM goal_items WHERE board_id = ? ORDER BY sort_order ASC, created_at ASC
-  `).all(boardId).map(i => ({
-    id: i.id, boardId: i.board_id, title: i.title, description: i.description, category: i.category,
-    targetDate: i.target_date, weight: i.weight, progressPercent: i.progress_percent, status: i.status,
-    sortOrder: i.sort_order, priority: (i.priority as any) || 'MEDIUM', targetQtr: i.target_qtr || null,
-    plansCount: Number(i.plans_count) || 0, createdAt: i.created_at, updatedAt: i.updated_at,
-  }));
+  `).all(boardId);
+
+  const items = rawItems.map(i => {
+    const linkedPlanIds = rawLinks.filter(l => l.gap_id === i.id).map(l => l.plan_id);
+    const linkedGapIds = rawLinks.filter(l => l.plan_id === i.id).map(l => l.gap_id);
+    const linkedGaps: Array<{ id: string; title: string; priority?: PriorityLevel }> = [];
+    for (const gid of linkedGapIds) {
+      const g = rawItems.find(x => x.id === gid);
+      if (g) linkedGaps.push({ id: g.id, title: g.title, priority: (g.priority as any) || 'MEDIUM' });
+    }
+
+    return {
+      id: i.id, boardId: i.board_id, title: i.title, description: i.description, category: i.category,
+      targetDate: i.target_date, weight: i.weight, progressPercent: i.progress_percent, status: i.status,
+      sortOrder: i.sort_order, priority: (i.priority as any) || 'MEDIUM', targetQtr: i.target_qtr || null,
+      plansCount: linkedPlanIds.length,
+      linkedPlanIds,
+      linkedGapIds,
+      linkedGaps,
+      createdAt: i.created_at, updatedAt: i.updated_at,
+    };
+  });
 
   const rawComments = allowedTimeline ? goalsDb.query<any, [string]>(`
     SELECT * FROM review_comments WHERE board_id = ? ORDER BY created_at ASC

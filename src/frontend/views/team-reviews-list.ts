@@ -312,41 +312,23 @@ export function renderTeamReviewsSection(user: AuthUser, teamBoards: GoalBoard[]
   return `
     <style>
       .team-sublist-cards-list { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 16px 16px; }
-      .team-board-row-card {
-        display: flex; align-items: center; justify-content: space-between; gap: 16px;
-        padding: 12px 16px; background: var(--forge-bg-surface);
-        border: 1px solid var(--forge-border); border-left: 3.5px solid var(--status-accent);
-        border-radius: 12px; transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
-      }
-      .team-board-row-card:hover {
-        background: rgba(255, 255, 255, 0.02); border-color: rgba(99, 102, 241, 0.35);
-        transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-      }
+      .team-board-row-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; background: var(--forge-bg-surface); border: 1px solid var(--forge-border); border-left: 3.5px solid var(--status-accent); border-radius: 12px; transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease; }
+      .team-board-row-card:hover { background: rgba(255, 255, 255, 0.02); border-color: rgba(99, 102, 241, 0.35); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15); }
       .board-card-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
       .board-card-title-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
       .board-card-title { font-size: 0.92rem; font-weight: 700; color: var(--forge-text-main); text-decoration: none; transition: color 0.15s ease; }
       .board-card-title:hover { color: var(--forge-primary); }
       .board-card-status-pill { font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 9999px; letter-spacing: 0.03em; }
       .board-card-meta-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      .board-chip {
-        font-size: 0.72rem; color: var(--forge-text-muted); display: inline-flex; align-items: center; gap: 4px;
-        padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--forge-border);
-      }
+      .board-chip { font-size: 0.72rem; color: var(--forge-text-muted); display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--forge-border); }
       .board-card-actions { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
       .card-action-btn { height: 30px; font-size: 0.74rem; padding: 0 10px; }
       .rework-btn { color: var(--forge-warning) !important; border-color: rgba(245, 158, 11, 0.3) !important; }
       .rework-btn:hover { background: rgba(245, 158, 11, 0.1) !important; }
       .approve-btn { color: var(--forge-success) !important; border-color: rgba(16, 185, 129, 0.3) !important; }
       .approve-btn:hover { background: rgba(16, 185, 129, 0.1) !important; }
-      @media (max-width: 960px) {
-        .team-board-row-card { flex-direction: column; align-items: stretch; gap: 12px; }
-        .board-card-actions { justify-content: flex-start; border-top: 1px solid var(--forge-border); padding-top: 8px; }
-      }
-      @media (max-width: 640px) {
-        .hide-mobile { display: none !important; }
-        .board-card-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
-        .board-card-actions .btn-action { justify-content: center; }
-      }
+      @media (max-width: 960px) { .team-board-row-card { flex-direction: column; align-items: stretch; gap: 12px; } .board-card-actions { justify-content: flex-start; border-top: 1px solid var(--forge-border); padding-top: 8px; } }
+      @media (max-width: 640px) { .hide-mobile { display: none !important; } .board-card-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; } .board-card-actions .btn-action { justify-content: center; } }
     </style>
 
     ${isNoSubordinateManagers ? renderNoSubordinateManagersBanner() : ''}
@@ -360,26 +342,38 @@ export function renderTeamReviewsSection(user: AuthUser, teamBoards: GoalBoard[]
 
       <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
         <!-- Status Filters -->
-        <div style="display: flex; gap: 6px; background: var(--forge-bg-surface); padding: 3px; border-radius: 10px; border: 1px solid var(--forge-border);" id="teamFilterGroup">
-          <button class="btn-action btn-outline active-filter" id="filterBtnAll" style="height: 30px; font-size: 0.75rem; padding: 0 10px;" onclick="setTeamStatusFilter('ALL', this)">All (${teamBoards.length})</button>
-          <button class="btn-action btn-outline" id="filterBtnPending" style="height: 30px; font-size: 0.75rem; padding: 0 10px;" onclick="setTeamStatusFilter('SUBMITTED', this)">Needs Review (${teamPendingCount})</button>
-          <button class="btn-action btn-outline" id="filterBtnRework" style="height: 30px; font-size: 0.75rem; padding: 0 10px;" onclick="setTeamStatusFilter('REWORK_REQUESTED', this)">In Revision (${teamReworkCount})</button>
-          <button class="btn-action btn-outline" id="filterBtnApproved" style="height: 30px; font-size: 0.75rem; padding: 0 10px;" onclick="setTeamStatusFilter('APPROVED', this)">Approved (${teamApprovedCount})</button>
+        <div class="modern-filter-group" id="teamFilterGroup" role="tablist" aria-label="Filter reviews by status">
+          <button class="modern-filter-btn active-filter" id="filterBtnAll" onclick="setTeamStatusFilter('ALL', this)" role="tab" aria-selected="true">
+            <span>All</span>
+            <span class="filter-badge">${teamBoards.length}</span>
+          </button>
+          <button class="modern-filter-btn" id="filterBtnPending" onclick="setTeamStatusFilter('SUBMITTED', this)" role="tab" aria-selected="false">
+            <span>Needs Review</span>
+            <span class="filter-badge ${teamPendingCount > 0 ? 'has-pending' : ''}">${teamPendingCount}</span>
+          </button>
+          <button class="modern-filter-btn" id="filterBtnRework" onclick="setTeamStatusFilter('REWORK_REQUESTED', this)" role="tab" aria-selected="false">
+            <span>In Revision</span>
+            <span class="filter-badge ${teamReworkCount > 0 ? 'has-rework' : ''}">${teamReworkCount}</span>
+          </button>
+          <button class="modern-filter-btn" id="filterBtnApproved" onclick="setTeamStatusFilter('APPROVED', this)" role="tab" aria-selected="false">
+            <span>Approved</span>
+            <span class="filter-badge ${teamApprovedCount > 0 ? 'has-approved' : ''}">${teamApprovedCount}</span>
+          </button>
         </div>
 
         <!-- View Switcher -->
-        <div style="display: inline-flex; gap: 2px; background: var(--forge-bg-surface); padding: 3px; border-radius: 10px; border: 1px solid var(--forge-border);">
-          <button class="btn-action btn-outline active-view" id="btnTeamListView" data-astryx-tooltip="List View" style="height: 30px; padding: 0 10px; font-size: 0.75rem;" onclick="switchTeamViewMode('list')">
-            ${icons.layers} List
+        <div class="modern-view-switcher" role="radiogroup" aria-label="View mode">
+          <button class="view-switch-btn active-view" id="btnTeamListView" data-astryx-tooltip="List View" onclick="switchTeamViewMode('list')" role="radio" aria-checked="true">
+            ${icons.layers} <span>List</span>
           </button>
-          <button class="btn-action btn-outline" id="btnTeamCardsView" data-astryx-tooltip="Cards View" style="height: 30px; padding: 0 10px; font-size: 0.75rem;" onclick="switchTeamViewMode('cards')">
-            ${icons.target} Cards
+          <button class="view-switch-btn" id="btnTeamCardsView" data-astryx-tooltip="Cards View" onclick="switchTeamViewMode('cards')" role="radio" aria-checked="false">
+            ${icons.target} <span>Cards</span>
           </button>
         </div>
 
         <!-- Expand / Collapse Master -->
-        <button class="btn-action btn-outline" id="btnTeamToggleAll" style="height: 32px; font-size: 0.75rem; padding: 0 10px;" onclick="toggleAllEmployeeAccordions()">
-          ${icons.sliders} Toggle All
+        <button class="toggle-all-btn" id="btnTeamToggleAll" data-astryx-tooltip="Expand or collapse all employee groups" onclick="toggleAllEmployeeAccordions()">
+          ${icons.sliders} <span>Toggle All</span>
         </button>
       </div>
     </div>
@@ -423,10 +417,14 @@ export function renderTeamReviewsSection(user: AuthUser, teamBoards: GoalBoard[]
           if (btnList && btnCards) {
             if (mode === 'list') {
               btnList.classList.add('active-view');
+              btnList.setAttribute('aria-checked', 'true');
               btnCards.classList.remove('active-view');
+              btnCards.setAttribute('aria-checked', 'false');
             } else {
               btnList.classList.remove('active-view');
+              btnList.setAttribute('aria-checked', 'false');
               btnCards.classList.add('active-view');
+              btnCards.setAttribute('aria-checked', 'true');
             }
           }
           document.querySelectorAll('.team-sublist-table-view').forEach(v => {
@@ -440,8 +438,12 @@ export function renderTeamReviewsSection(user: AuthUser, teamBoards: GoalBoard[]
         window.setTeamStatusFilter = function(status, btnElement) {
           currentStatusFilter = status;
           if (btnElement) {
-            document.querySelectorAll('#teamFilterGroup button').forEach(b => b.classList.remove('active-filter'));
+            document.querySelectorAll('#teamFilterGroup .modern-filter-btn').forEach(b => {
+              b.classList.remove('active-filter');
+              b.setAttribute('aria-selected', 'false');
+            });
             btnElement.classList.add('active-filter');
+            btnElement.setAttribute('aria-selected', 'true');
           }
           window.filterTeamReviews();
         };

@@ -178,6 +178,20 @@ goalsDb.run(`
   );
 `);
 
+goalsDb.run(`
+  CREATE TABLE IF NOT EXISTS goal_gap_plan_links (
+    id TEXT PRIMARY KEY,
+    board_id TEXT NOT NULL,
+    gap_id TEXT NOT NULL,
+    plan_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (board_id) REFERENCES goal_boards(id) ON DELETE CASCADE,
+    FOREIGN KEY (gap_id) REFERENCES goal_items(id) ON DELETE CASCADE,
+    FOREIGN KEY (plan_id) REFERENCES goal_items(id) ON DELETE CASCADE,
+    UNIQUE(gap_id, plan_id)
+  );
+`);
+
 // Add query optimization indexes
 goalsDb.run('CREATE INDEX IF NOT EXISTS idx_goal_boards_org_owner ON goal_boards(org_id, owner_id);');
 goalsDb.run('CREATE INDEX IF NOT EXISTS idx_goal_boards_status_owner ON goal_boards(status, owner_id);');
@@ -185,7 +199,12 @@ goalsDb.run('CREATE INDEX IF NOT EXISTS idx_goal_items_board_id ON goal_items(bo
 goalsDb.run('CREATE INDEX IF NOT EXISTS idx_goal_items_board_order ON goal_items(board_id, sort_order);');
 goalsDb.run('CREATE INDEX IF NOT EXISTS idx_review_comments_board_id ON review_comments(board_id);');
 goalsDb.run('CREATE INDEX IF NOT EXISTS idx_review_comments_board_time ON review_comments(board_id, created_at);');
+goalsDb.run('CREATE INDEX IF NOT EXISTS idx_goal_items_title ON goal_items(title);');
+goalsDb.run('CREATE INDEX IF NOT EXISTS idx_goal_items_category ON goal_items(category);');
 goalsDb.run('CREATE INDEX IF NOT EXISTS idx_reminders_org_user ON reminders(org_id, user_id, is_dismissed);');
+goalsDb.run('CREATE INDEX IF NOT EXISTS idx_gap_plan_links_board ON goal_gap_plan_links(board_id);');
+goalsDb.run('CREATE INDEX IF NOT EXISTS idx_gap_plan_links_gap ON goal_gap_plan_links(gap_id);');
+goalsDb.run('CREATE INDEX IF NOT EXISTS idx_gap_plan_links_plan ON goal_gap_plan_links(plan_id);');
 
 // Seed initial data if explicitly requested (Strict Zero-Dummy Invariant)
 export function seedDefaultData(defaultOrgId = 'org_default'): void {

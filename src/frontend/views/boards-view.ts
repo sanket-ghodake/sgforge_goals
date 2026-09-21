@@ -192,20 +192,30 @@ export function renderBoardsView(user: AuthUser, boards: GoalBoard[], projects: 
         </div>
 
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-          <div style="display: flex; gap: 6px; background: var(--forge-bg-surface); padding: 3px; border-radius: 10px; border: 1px solid var(--forge-border);" id="boardStatusPills">
-            <button class="btn-action btn-outline active-filter" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('ALL', this)" style="height: 30px; font-size: 0.75rem; padding: 0 10px;">All (${myBoards.length})</button>
-            <button class="btn-action btn-outline" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('DRAFT', this)" style="height: 30px; font-size: 0.75rem; padding: 0 10px;">Drafts (${draftCount})</button>
-            <button class="btn-action btn-outline" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('SUBMITTED', this)" style="height: 30px; font-size: 0.75rem; padding: 0 10px;">Under Review (${submittedCount})</button>
-            <button class="btn-action btn-outline" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('REWORK_REQUESTED', this)" style="height: 30px; font-size: 0.75rem; padding: 0 10px;">Revisions (${reworkCount})</button>
-            <button class="btn-action btn-outline" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('APPROVED', this)" style="height: 30px; font-size: 0.75rem; padding: 0 10px;">Approved (${approvedCount})</button>
+          <div class="modern-filter-group" id="boardStatusPills" role="tablist" aria-label="Filter boards by status">
+            <button class="modern-filter-btn active-filter" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('ALL', this)" role="tab" aria-selected="true">
+              <span>All</span> <span class="filter-badge">${myBoards.length}</span>
+            </button>
+            <button class="modern-filter-btn" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('DRAFT', this)" role="tab" aria-selected="false">
+              <span>Drafts</span> <span class="filter-badge">${draftCount}</span>
+            </button>
+            <button class="modern-filter-btn" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('SUBMITTED', this)" role="tab" aria-selected="false">
+              <span>Under Review</span> <span class="filter-badge ${submittedCount > 0 ? 'has-pending' : ''}">${submittedCount}</span>
+            </button>
+            <button class="modern-filter-btn" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('REWORK_REQUESTED', this)" role="tab" aria-selected="false">
+              <span>Revisions</span> <span class="filter-badge ${reworkCount > 0 ? 'has-rework' : ''}">${reworkCount}</span>
+            </button>
+            <button class="modern-filter-btn" onclick="window.setBoardStatusFilter && window.setBoardStatusFilter('APPROVED', this)" role="tab" aria-selected="false">
+              <span>Approved</span> <span class="filter-badge ${approvedCount > 0 ? 'has-approved' : ''}">${approvedCount}</span>
+            </button>
           </div>
 
-          <div style="display: inline-flex; gap: 2px; background: var(--forge-bg-surface); padding: 3px; border-radius: 10px; border: 1px solid var(--forge-border);">
-            <button class="btn-action btn-outline active-view" id="btnBoardsCardsView" data-astryx-tooltip="Cards View" style="height: 30px; padding: 0 10px; font-size: 0.75rem;" onclick="window.switchBoardsViewMode && window.switchBoardsViewMode('cards')">
-              ${icons.target} Cards
+          <div class="modern-view-switcher" role="radiogroup" aria-label="View mode">
+            <button class="view-switch-btn active-view" id="btnBoardsCardsView" data-astryx-tooltip="Cards View" style="height: 30px;" onclick="window.switchBoardsViewMode && window.switchBoardsViewMode('cards')" role="radio" aria-checked="true">
+              ${icons.target} <span>Cards</span>
             </button>
-            <button class="btn-action btn-outline" id="btnBoardsTableView" data-astryx-tooltip="List View" style="height: 30px; padding: 0 10px; font-size: 0.75rem;" onclick="window.switchBoardsViewMode && window.switchBoardsViewMode('table')">
-              ${icons.layers} List
+            <button class="view-switch-btn" id="btnBoardsTableView" data-astryx-tooltip="List View" style="height: 30px;" onclick="window.switchBoardsViewMode && window.switchBoardsViewMode('table')" role="radio" aria-checked="false">
+              ${icons.layers} <span>List</span>
             </button>
           </div>
         </div>
